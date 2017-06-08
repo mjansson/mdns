@@ -133,17 +133,20 @@ main() {
 	}
 	printf("Opened IPv4 socket for mDNS/DNS-SD\n");
 
+	printf("Sending DNS-SD discovery\n");
 	if (mdns_discovery_send(sock)) {
 		printf("Failed to send DNS-DS discovery: %s\n", strerror(errno));
 		goto quit;
 	}
 
+	printf("Reading DNS-SD replies\n");
 	buffer = malloc(capacity);
 	for (int i = 0; i < 10; ++i) {
 		records = mdns_discovery_recv(sock, buffer, capacity, callback);
 		sleep(1);
 	}
 
+	printf("Sending mDNS query\n");
 	if (mdns_query_send(sock, MDNS_RECORDTYPE_PTR,
 	                    MDNS_STRING_CONST("_ssh._tcp.local."),
 	                    buffer, capacity)) {
@@ -151,6 +154,7 @@ main() {
 		goto quit;
 	}
 
+	printf("Reading mDNS replies\n");
 	for (int i = 0; i < 10; ++i) {
 		records = mdns_query_recv(sock, buffer, capacity, callback);
 		sleep(1);
