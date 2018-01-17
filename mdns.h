@@ -690,7 +690,7 @@ mdns_query_recv(int sock, void* buffer, size_t capacity,
 #endif
 	socklen_t addrlen = sizeof(addr);
 	int ret = recvfrom(sock, buffer, capacity, 0,
-	                   (struct sockaddr*)&saddr, &addrlen);
+	                   saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
