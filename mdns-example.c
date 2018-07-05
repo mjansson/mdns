@@ -1,5 +1,5 @@
 
-#include "mdns.h"
+#include "libmdns.h"
 
 #include <stdio.h>
 #include <errno.h>
@@ -147,8 +147,8 @@ main() {
 	}
 
 	printf("Sending mDNS query\n");
-	if (mdns_query_send(sock, MDNS_RECORDTYPE_PTR,
-	                    MDNS_STRING_CONST("_ssh._tcp.local."),
+	if (mdns_query_send(sock, MDNS_RECORDTYPE_A,
+	                    MDNS_STRING_CONST("user-PC.local"),
 	                    buffer, capacity)) {
 		printf("Failed to send mDNS query: %s\n", strerror(errno));
 		goto quit;
