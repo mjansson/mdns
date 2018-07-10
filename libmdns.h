@@ -21,8 +21,13 @@
 #include <string.h>
 
 #include <fcntl.h>
+#ifdef __WIN32__
+#include <Winsock2.h>
+#include <Ws2tcpip.h>
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
+#endif
 
 #define MDNS_INVALID_POS ((size_t)-1)
 

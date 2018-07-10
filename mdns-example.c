@@ -4,7 +4,10 @@
 #include <stdio.h>
 #include <errno.h>
 
+#ifndef __WIN32__
 #include <netdb.h>
+#endif
+
 
 static char addrbuffer[64];
 static char namebuffer[256];
@@ -122,6 +125,12 @@ callback(const struct sockaddr* from,
 
 int
 main() {
+#ifdef __WIN32__
+   WORD versionWanted = MAKEWORD(1, 1);
+   WSADATA wsaData;
+   WSAStartup(versionWanted, &wsaData);
+#endif
+	
 	size_t capacity = 2048;
 	void* buffer = 0;
 	size_t records;
@@ -166,5 +175,9 @@ quit:
 	mdns_socket_close(sock);
 	printf("Closed socket\n");
 
+#ifdef __WIN32__
+   WSACleanup();
+#endif
+	
 	return 0;
 }
