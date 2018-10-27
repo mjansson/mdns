@@ -16,12 +16,18 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 
 #include <fcntl.h>
+#ifdef _WIN32
+#include <Winsock2.h>
+#include <Ws2tcpip.h>
+#define strncasecmp _strnicmp
+#else
+#include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#endif
 
 #define MDNS_INVALID_POS ((size_t)-1)
 
@@ -571,7 +577,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 		if (!mdns_string_equal(buffer, data_size, &ofs,
 		                       mdns_services_query, sizeof(mdns_services_query), &verify_ofs))
 			return 0;
-		data = buffer + ofs;
+		data = (uint16_t*)((char*)buffer + ofs);
 
 		uint16_t type = ntohs(*data++);
 		uint16_t rclass = ntohs(*data++);
@@ -588,7 +594,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 		//Verify it's an answer to our question, _services._dns-sd._udp.local.
 		int is_answer = mdns_string_equal(buffer, data_size, &ofs,
 		                                  mdns_services_query, sizeof(mdns_services_query), &verify_ofs);
-		data = buffer + ofs;
+		data = (uint16_t*)((char*)buffer + ofs);
 
 		uint16_t type = ntohs(*data++);
 		uint16_t rclass = ntohs(*data++);
@@ -838,3 +844,7 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 
 	return parsed;	
 }
+
+#ifdef _WIN32
+#undef strncasecmp
+#endif

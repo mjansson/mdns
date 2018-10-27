@@ -1,10 +1,18 @@
 
+#ifdef _WIN32
+#  define _CRT_SECURE_NO_WARNINGS 1
+#endif
+
 #include "mdns.h"
 
 #include <stdio.h>
 #include <errno.h>
 
-#include <netdb.h>
+#ifdef _WIN32
+#  define sleep(x) Sleep(x * 1000)
+#else
+#  include <netdb.h>
+#endif
 
 static char addrbuffer[64];
 static char namebuffer[256];
@@ -24,7 +32,7 @@ ipv4_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in* 
 		else
 			len = snprintf(buffer, capacity, "%s", host);
 	}
-	if (len >= capacity)
+	if (len >= (int)capacity)
 		len = (int)capacity - 1;
 	mdns_string_t str = {buffer, len};
 	return str;
@@ -44,7 +52,7 @@ ipv6_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in6*
 		else
 			len = snprintf(buffer, capacity, "%s", host);
 	}
-	if (len >= capacity)
+	if (len >= (int)capacity)
 		len = (int)capacity - 1;
 	mdns_string_t str = {buffer, len};
 	return str;
@@ -126,6 +134,12 @@ main() {
 	void* buffer = 0;
 	size_t records;
 
+#ifdef _WIN32
+	WORD versionWanted = MAKEWORD(1, 1);
+	WSADATA wsaData;
+	WSAStartup(versionWanted, &wsaData);
+#endif
+
 	int sock = mdns_socket_open_ipv4();
 	if (sock < 0) {
 		printf("Failed to open socket: %s\n", strerror(errno));
@@ -165,6 +179,10 @@ quit:
 
 	mdns_socket_close(sock);
 	printf("Closed socket\n");
+
+#ifdef _WIN32
+	WSACleanup();
+#endif
 
 	return 0;
 }
