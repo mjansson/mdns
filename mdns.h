@@ -65,7 +65,8 @@ typedef enum mdns_class        mdns_class_t;
 typedef int (* mdns_record_callback_fn)(const struct sockaddr* from,
                                         mdns_entry_type_t entry, uint16_t type,
                                         uint16_t rclass, uint32_t ttl,
-                                        const void* data, size_t size, size_t offset, size_t length);
+                                        const void* data, size_t size, size_t offset, size_t length,
+                                        void* user_data);
 
 typedef struct mdns_string_t       mdns_string_t;
 typedef struct mdns_string_pair_t  mdns_string_pair_t;
@@ -115,7 +116,7 @@ mdns_discovery_send(int sock);
 
 static size_t
 mdns_discovery_recv(int sock, void* buffer, size_t capacity,
-                    mdns_record_callback_fn callback);
+                    mdns_record_callback_fn callback, void* user_data);
 
 static int
 mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t length,
@@ -123,7 +124,7 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 
 static size_t
 mdns_query_recv(int sock, void* buffer, size_t capacity,
-                mdns_record_callback_fn callback);
+                mdns_record_callback_fn callback, void* user_data);
 
 static mdns_string_t
 mdns_string_extract(const void* buffer, size_t size, size_t* offset,
@@ -449,7 +450,8 @@ mdns_string_make(void* data, size_t capacity, const char* name, size_t length) {
 
 static size_t
 mdns_records_parse(const struct sockaddr* from, const void* buffer, size_t size, size_t* offset,
-                   mdns_entry_type_t type, size_t records, mdns_record_callback_fn callback) {
+                   mdns_entry_type_t type, size_t records, mdns_record_callback_fn callback,
+                   void* user_data) {
 	size_t parsed = 0;
 	int do_callback = 1;
 	for (size_t i = 0; i < records; ++i) {
@@ -465,7 +467,8 @@ mdns_records_parse(const struct sockaddr* from, const void* buffer, size_t size,
 
 		if (do_callback) {
 			++parsed;
-			if (callback(from, type, rtype, rclass, ttl, buffer, size, *offset, length))
+			if (callback(from, type, rtype, rclass, ttl, buffer, size, *offset, length,
+			             user_data))
 				do_callback = 0;
 		}
 
@@ -538,7 +541,7 @@ mdns_discovery_send(int sock) {
 
 static size_t
 mdns_discovery_recv(int sock, void* buffer, size_t capacity,
-                    mdns_record_callback_fn callback) {
+                    mdns_record_callback_fn callback, void* user_data) {
 	struct sockaddr_in6 addr;
 	struct sockaddr* saddr = (struct sockaddr*)&addr;
 	memset(&addr, 0, sizeof(addr));
@@ -604,7 +607,8 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 		if (is_answer && do_callback) {
 			++records;
 			if (callback(saddr, MDNS_ENTRYTYPE_ANSWER, type, rclass, ttl, buffer,
-			             data_size, (size_t)((char*)data - (char*)buffer), length))
+			             data_size, (size_t)((char*)data - (char*)buffer), length,
+			             user_data))
 				do_callback = 0;
 		}
 		data = (void*)((char*)data + length);
@@ -612,9 +616,11 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 
 	size_t offset = (size_t)((char*)data - (char*)buffer);
 	records += mdns_records_parse(saddr, buffer, data_size, &offset,
-	                              MDNS_ENTRYTYPE_AUTHORITY, authority_rrs, callback);
+	                              MDNS_ENTRYTYPE_AUTHORITY, authority_rrs, 
+	                              callback, user_data);
 	records += mdns_records_parse(saddr, buffer, data_size, &offset,
-	                              MDNS_ENTRYTYPE_ADDITIONAL, additional_rrs, callback);
+	                              MDNS_ENTRYTYPE_ADDITIONAL, additional_rrs, 
+	                              callback, user_data);
 
 	return records;
 }
@@ -686,7 +692,7 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 
 static size_t
 mdns_query_recv(int sock, void* buffer, size_t capacity,
-                mdns_record_callback_fn callback) {
+                mdns_record_callback_fn callback, void* user_data) {
 	struct sockaddr_in6 addr;
 	struct sockaddr* saddr = (struct sockaddr*)&addr;
 	memset(&addr, 0, sizeof(addr));
@@ -730,11 +736,14 @@ mdns_query_recv(int sock, void* buffer, size_t capacity,
 	size_t records = 0;
 	size_t offset = (size_t)((char*)data - (char*)buffer);
 	records += mdns_records_parse(saddr, buffer, data_size, &offset,
-	                              MDNS_ENTRYTYPE_ANSWER, answer_rrs, callback);
+	                              MDNS_ENTRYTYPE_ANSWER, answer_rrs, 
+	                              callback, user_data);
 	records += mdns_records_parse(saddr, buffer, data_size, &offset,
-	                              MDNS_ENTRYTYPE_AUTHORITY, authority_rrs, callback);
+	                              MDNS_ENTRYTYPE_AUTHORITY, authority_rrs, 
+	                              callback, user_data);
 	records += mdns_records_parse(saddr, buffer, data_size, &offset,
-	                              MDNS_ENTRYTYPE_ADDITIONAL, additional_rrs, callback);
+	                              MDNS_ENTRYTYPE_ADDITIONAL, additional_rrs, 
+	                              callback, user_data);
 	return records;
 }
 

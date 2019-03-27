@@ -69,7 +69,8 @@ static int
 callback(const struct sockaddr* from,
          mdns_entry_type_t entry, uint16_t type,
          uint16_t rclass, uint32_t ttl,
-         const void* data, size_t size, size_t offset, size_t length) {
+         const void* data, size_t size, size_t offset, size_t length,
+         void* user_data) {
 	mdns_string_t fromaddrstr = ip_address_to_string(addrbuffer, sizeof(addrbuffer), from);
 	const char* entrytype = (entry == MDNS_ENTRYTYPE_ANSWER) ? "answer" :
 	                        ((entry == MDNS_ENTRYTYPE_AUTHORITY) ? "authority" : "additional");
@@ -132,6 +133,7 @@ int
 main() {
 	size_t capacity = 2048;
 	void* buffer = 0;
+	void* user_data = 0;
 	size_t records;
 
 #ifdef _WIN32
@@ -156,7 +158,8 @@ main() {
 	printf("Reading DNS-SD replies\n");
 	buffer = malloc(capacity);
 	for (int i = 0; i < 10; ++i) {
-		records = mdns_discovery_recv(sock, buffer, capacity, callback);
+		records = mdns_discovery_recv(sock, buffer, capacity, callback,
+		                              user_data);
 		sleep(1);
 	}
 
@@ -170,7 +173,7 @@ main() {
 
 	printf("Reading mDNS replies\n");
 	for (int i = 0; i < 10; ++i) {
-		records = mdns_query_recv(sock, buffer, capacity, callback);
+		records = mdns_query_recv(sock, buffer, capacity, callback, user_data);
 		sleep(1);
 	}
 
