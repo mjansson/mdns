@@ -124,7 +124,8 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 
 static size_t
 mdns_query_recv(int sock, void* buffer, size_t capacity,
-                mdns_record_callback_fn callback, void* user_data);
+                mdns_record_callback_fn callback, void* user_data,
+                uint8_t one_shot);
 
 static mdns_string_t
 mdns_string_extract(const void* buffer, size_t size, size_t* offset,
@@ -692,7 +693,8 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 
 static size_t
 mdns_query_recv(int sock, void* buffer, size_t capacity,
-                mdns_record_callback_fn callback, void* user_data) {
+                mdns_record_callback_fn callback, void* user_data,
+                uint8_t one_shot) {
 	struct sockaddr_in6 addr;
 	struct sockaddr* saddr = (struct sockaddr*)&addr;
 	memset(&addr, 0, sizeof(addr));
@@ -716,7 +718,7 @@ mdns_query_recv(int sock, void* buffer, size_t capacity,
 	uint16_t authority_rrs  = ntohs(*data++);
 	uint16_t additional_rrs = ntohs(*data++);
 
-	if (transaction_id != mdns_transaction_id)// || (flags != 0x8400))
+	if (one_shot && transaction_id != mdns_transaction_id)// || (flags != 0x8400))
 		return 0; //Not a reply to our last question
 
 	if (questions > 1)

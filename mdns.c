@@ -173,7 +173,7 @@ main() {
 
 	printf("Reading mDNS replies\n");
 	for (int i = 0; i < 10; ++i) {
-		records = mdns_query_recv(sock, buffer, capacity, callback, user_data);
+		records = mdns_query_recv(sock, buffer, capacity, callback, user_data, 1);
 		sleep(1);
 	}
 
