@@ -1,6 +1,6 @@
-# Single header public domain mDNS/DNS-SD library in C
+# Public domain mDNS/DNS-SD library in C
 
-This library provides a cross-platform single header mDNS and DNS-DS library in C
+This library provides a cross-platform mDNS and DNS-DS library in C
   
 The latest source code maintained by Rampant Pixels is always available at
 
