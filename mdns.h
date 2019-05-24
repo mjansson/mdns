@@ -1,11 +1,11 @@
-/* mdns.h  -  mDNS/DNS-SD library  -  Public Domain  -  2017 Mattias Jansson / Rampant Pixels
+/* mdns.h  -  mDNS/DNS-SD library  -  Public Domain  -  2017 Mattias Jansson
  *
  * This library provides a cross-platform mDNS and DNS-SD library in C.
  * The implementation is based on RFC 6762 and RFC 6763.
  *
- * The latest source code maintained by Rampant Pixels is always available at
+ * The latest source code is always available at
  *
- * https://github.com/rampantpixels/mdns
+ * https://github.com/mjansson/mdns
  *
  * This library is put in the public domain; you can redistribute it and/or modify it without any restrictions.
  *
