@@ -503,10 +503,11 @@ static const uint8_t mdns_services_query[] = {
 
 static int
 mdns_discovery_send(int sock) {
+	struct sockaddr_storage addr_storage;
 	struct sockaddr_in addr;
 	struct sockaddr_in6 addr6;
-	struct sockaddr* saddr = (struct sockaddr*)&addr;
-	socklen_t saddrlen = sizeof(struct sockaddr);
+	struct sockaddr* saddr = (struct sockaddr*)&addr_storage;
+	socklen_t saddrlen = sizeof(struct sockaddr_storage);
 	if (getsockname(sock, saddr, &saddrlen))
 		return -1;
 	if (saddr->sa_family == AF_INET6) {
@@ -654,10 +655,11 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	//! Unicast response, class IN
 	*data++ = htons(0x8000U | MDNS_CLASS_IN);
 
+	struct sockaddr_storage addr_storage;
 	struct sockaddr_in addr;
 	struct sockaddr_in6 addr6;
-	struct sockaddr* saddr = (struct sockaddr*)&addr;
-	socklen_t saddrlen = sizeof(struct sockaddr);
+	struct sockaddr* saddr = (struct sockaddr*)&addr_storage;
+	socklen_t saddrlen = sizeof(struct sockaddr_storage);
 	if (getsockname(sock, saddr, &saddrlen))
 		return -1;
 	if (saddr->sa_family == AF_INET6) {
