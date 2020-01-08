@@ -139,10 +139,13 @@ main() {
 #ifdef _WIN32
 	WORD versionWanted = MAKEWORD(1, 1);
 	WSADATA wsaData;
-	WSAStartup(versionWanted, &wsaData);
+	if (WSAStartup(versionWanted, &wsaData)) {
+		printf("Failed to initialize WinSock\n");
+		return -1;
+    }
 #endif
 
-	int sock = mdns_socket_open_ipv4();
+	int sock = mdns_socket_open_ipv4(0);
 	if (sock < 0) {
 		printf("Failed to open socket: %s\n", strerror(errno));
 		return -1;
@@ -158,14 +161,16 @@ main() {
 	printf("Reading DNS-SD replies\n");
 	buffer = malloc(capacity);
 	for (int i = 0; i < 10; ++i) {
-		records = mdns_discovery_recv(sock, buffer, capacity, callback,
-		                              user_data);
+		do {
+			records = mdns_discovery_recv(sock, buffer, capacity, callback,
+			                              user_data);
+		} while (records);
 		sleep(1);
 	}
 
 	printf("Sending mDNS query\n");
 	if (mdns_query_send(sock, MDNS_RECORDTYPE_PTR,
-	                    MDNS_STRING_CONST("_ssh._tcp.local."),
+	                    MDNS_STRING_CONST("_smb._tcp.local."),
 	                    buffer, capacity)) {
 		printf("Failed to send mDNS query: %s\n", strerror(errno));
 		goto quit;
@@ -173,7 +178,9 @@ main() {
 
 	printf("Reading mDNS replies\n");
 	for (int i = 0; i < 10; ++i) {
-		records = mdns_query_recv(sock, buffer, capacity, callback, user_data, 1);
+		do {
+			records = mdns_query_recv(sock, buffer, capacity, callback, user_data, 1);
+		} while (records);
 		sleep(1);
 	}
 

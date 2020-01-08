@@ -34,6 +34,8 @@
 #define MDNS_STRING_CONST(s) (s), (sizeof((s))-1)
 #define MDNS_STRING_FORMAT(s) (int)((s).length), s.str
 
+#define MDNS_PORT 5353
+
 enum mdns_record_type {
 	MDNS_RECORDTYPE_IGNORE = 0,
 	//Address
@@ -73,6 +75,12 @@ typedef struct mdns_string_pair_t  mdns_string_pair_t;
 typedef struct mdns_record_srv_t   mdns_record_srv_t;
 typedef struct mdns_record_txt_t   mdns_record_txt_t;
 
+#ifdef _WIN32
+typedef int mdns_size_t;
+#else
+typedef size_t mdns_size_t;
+#endif
+
 struct mdns_string_t {
 	const char* str;
 	size_t length;
@@ -97,16 +105,16 @@ struct mdns_record_txt_t {
 };
 
 static int
-mdns_socket_open_ipv4(void);
+mdns_socket_open_ipv4(int port);
 
 static int
-mdns_socket_setup_ipv4(int sock);
+mdns_socket_setup_ipv4(int sock, int port);
 
 static int
-mdns_socket_open_ipv6(void);
+mdns_socket_open_ipv6(int port);
 
 static int
-mdns_socket_setup_ipv6(int sock);
+mdns_socket_setup_ipv6(int sock, int port);
 
 static void
 mdns_socket_close(int sock);
@@ -164,11 +172,11 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 // Implementations
 
 static int
-mdns_socket_open_ipv4(void) {
+mdns_socket_open_ipv4(int port) {
 	int sock = (int)socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock < 0)
 		return -1;
-	if (mdns_socket_setup_ipv4(sock)) {
+	if (mdns_socket_setup_ipv4(sock, port)) {
 		mdns_socket_close(sock);
 		return -1;
 	}
@@ -176,11 +184,31 @@ mdns_socket_open_ipv4(void) {
 }
 
 static int
-mdns_socket_setup_ipv4(int sock) {
+mdns_socket_setup_ipv4(int sock, int port) {
+	unsigned char ttl = 1;
+	unsigned char loopback = 1;
+	unsigned int reuseaddr = 1;
+	struct ip_mreq req;
+
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuseaddr, sizeof(reuseaddr));
+#ifdef SO_REUSEPORT
+	setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuseaddr, sizeof(reuseaddr));
+#endif
+	setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (const char*)&ttl, sizeof(ttl));
+	setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (const char*)&loopback, sizeof(loopback));
+
+	memset(&req, 0, sizeof(req));
+	req.imr_multiaddr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
+	req.imr_interface.s_addr = INADDR_ANY;
+	if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&req, sizeof(req)))
+		return -1;
+
 	struct sockaddr_in saddr;
 	memset(&saddr, 0, sizeof(saddr));
 	saddr.sin_family = AF_INET;
 	saddr.sin_addr.s_addr = INADDR_ANY;
+	if (port)
+		saddr.sin_port = htons((unsigned short)port);
 #ifdef __APPLE__
 	saddr.sin_len = sizeof(saddr);
 #endif
@@ -196,28 +224,15 @@ mdns_socket_setup_ipv4(int sock) {
 	fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 #endif
 
-	unsigned char ttl = 1;
-	unsigned char loopback = 1;
-	struct ip_mreq req;
-
-	setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (const char*)&ttl, sizeof(ttl));
-	setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (const char*)&loopback, sizeof(loopback));
-
-	memset(&req, 0, sizeof(req));
-	req.imr_multiaddr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
-	req.imr_interface.s_addr = INADDR_ANY;
-	if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&req, sizeof(req)))
-		return -1;
-
 	return 0;
 }
 
 static int
-mdns_socket_open_ipv6(void) {
+mdns_socket_open_ipv6(int port) {
 	int sock = (int)socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock < 0)
 		return -1;
-	if (mdns_socket_setup_ipv6(sock)) {
+	if (mdns_socket_setup_ipv6(sock, port)) {
 		mdns_socket_close(sock);
 		return -1;
 	}
@@ -225,11 +240,32 @@ mdns_socket_open_ipv6(void) {
 }
 
 static int
-mdns_socket_setup_ipv6(int sock) {
+mdns_socket_setup_ipv6(int sock, int port) {
+	int hops = 1;
+	unsigned int loopback = 1;
+	unsigned int reuseaddr = 1;
+	struct ipv6_mreq req;
+
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuseaddr, sizeof(reuseaddr));
+#ifdef SO_REUSEPORT
+	setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuseaddr, sizeof(reuseaddr));
+#endif
+	setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, (const char*)&hops, sizeof(hops));
+	setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, (const char*)&loopback, sizeof(loopback));
+
+	memset(&req, 0, sizeof(req));
+	req.ipv6mr_multiaddr.s6_addr[0] = 0xFF;
+	req.ipv6mr_multiaddr.s6_addr[1] = 0x02;
+	req.ipv6mr_multiaddr.s6_addr[15] = 0xFB;
+	if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char*)&req, sizeof(req)))
+		return -1;
+
 	struct sockaddr_in6 saddr;
 	memset(&saddr, 0, sizeof(saddr));
 	saddr.sin6_family = AF_INET6;
 	saddr.sin6_addr = in6addr_any;
+	if (port)
+		saddr.sin6_port = htons((unsigned short)port);
 #ifdef __APPLE__
 	saddr.sin6_len = sizeof(saddr);
 #endif
@@ -244,20 +280,6 @@ mdns_socket_setup_ipv6(int sock) {
 	const int flags = fcntl(sock, F_GETFL, 0);
 	fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 #endif
-
-	int hops = 1;
-	unsigned int loopback = 1;
-	struct ipv6_mreq req;
-
-	setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, (const char*)&hops, sizeof(hops));
-	setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, (const char*)&loopback, sizeof(loopback));
-
-	memset(&req, 0, sizeof(req));
-	req.ipv6mr_multiaddr.s6_addr[0] = 0xFF;
-	req.ipv6mr_multiaddr.s6_addr[1] = 0x02;
-	req.ipv6mr_multiaddr.s6_addr[15] = 0xFB;
-	if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char*)&req, sizeof(req)))
-		return -1;
 
 	return 0;
 }
@@ -454,7 +476,7 @@ mdns_records_parse(const struct sockaddr* from, const void* buffer, size_t size,
                    mdns_entry_type_t type, size_t records, mdns_record_callback_fn callback,
                    void* user_data) {
 	size_t parsed = 0;
-	int do_callback = 1;
+	int do_callback = (callback ? 1 : 0);
 	for (size_t i = 0; i < records; ++i) {
 		mdns_string_skip(buffer, size, offset);
 		const uint16_t* data = (const uint16_t*)((const char*)buffer + (*offset));
@@ -476,6 +498,52 @@ mdns_records_parse(const struct sockaddr* from, const void* buffer, size_t size,
 		*offset += length;
 	}
 	return parsed;
+}
+
+static int
+mdns_unicast_send(int sock, void* address, size_t address_size, const void* buffer, size_t size) {
+	if (sendto(sock, buffer, (mdns_size_t)size, 0, address, (socklen_t)address_size) < 0)
+		return -1;
+	return 0;
+}
+
+static int
+mdns_multicast_send(int sock, const void* buffer, size_t size) {
+	struct sockaddr_storage addr_storage;
+	struct sockaddr_in addr;
+	struct sockaddr_in6 addr6;
+	struct sockaddr* saddr = (struct sockaddr*)&addr_storage;
+	socklen_t saddrlen = sizeof(struct sockaddr_storage);
+	if (getsockname(sock, saddr, &saddrlen))
+		return -1;
+	if (saddr->sa_family == AF_INET6) {
+		memset(&addr6, 0, sizeof(struct sockaddr_in6));
+		addr6.sin6_family = AF_INET6;
+#ifdef __APPLE__
+		addr6.sin6_len = sizeof(struct sockaddr_in6);
+#endif
+		addr6.sin6_addr.s6_addr[0] = 0xFF;
+		addr6.sin6_addr.s6_addr[1] = 0x02;
+		addr6.sin6_addr.s6_addr[15] = 0xFB;
+		addr6.sin6_port = htons((unsigned short)MDNS_PORT);
+		saddr = (struct sockaddr*)&addr6;
+		saddrlen = sizeof(struct sockaddr_in6);
+	}
+	else {
+		memset(&addr, 0, sizeof(struct sockaddr_in));
+		addr.sin_family = AF_INET;
+#ifdef __APPLE__
+		addr.sin_len = sizeof(struct sockaddr_in);
+#endif
+		addr.sin_addr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
+		addr.sin_port = htons((unsigned short)MDNS_PORT);
+		saddr = (struct sockaddr*)&addr;
+		saddrlen = sizeof(struct sockaddr_in);
+	}
+
+	if (sendto(sock, buffer, (mdns_size_t)size, 0, saddr, saddrlen) < 0)
+		return -1;
+	return 0;
 }
 
 static const uint8_t mdns_services_query[] = {
@@ -503,42 +571,7 @@ static const uint8_t mdns_services_query[] = {
 
 static int
 mdns_discovery_send(int sock) {
-	struct sockaddr_storage addr_storage;
-	struct sockaddr_in addr;
-	struct sockaddr_in6 addr6;
-	struct sockaddr* saddr = (struct sockaddr*)&addr_storage;
-	socklen_t saddrlen = sizeof(struct sockaddr_storage);
-	if (getsockname(sock, saddr, &saddrlen))
-		return -1;
-	if (saddr->sa_family == AF_INET6) {
-		memset(&addr6, 0, sizeof(struct sockaddr_in6));
-		addr6.sin6_family = AF_INET6;
-#ifdef __APPLE__
-		addr6.sin6_len = sizeof(struct sockaddr_in6);
-#endif
-		addr6.sin6_addr.s6_addr[0] = 0xFF;
-		addr6.sin6_addr.s6_addr[1] = 0x02;
-		addr6.sin6_addr.s6_addr[15] = 0xFB;
-		addr6.sin6_port = htons((unsigned short)5353);
-		saddr = (struct sockaddr*)&addr6;
-		saddrlen = sizeof(struct sockaddr_in6);
-	}
-	else {
-		memset(&addr, 0, sizeof(struct sockaddr_in));
-		addr.sin_family = AF_INET;
-#ifdef __APPLE__
-		addr.sin_len = sizeof(struct sockaddr_in);
-#endif
-		addr.sin_addr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
-		addr.sin_port = htons((unsigned short)5353);
-		saddr = (struct sockaddr*)&addr;
-		saddrlen = sizeof(struct sockaddr_in);
-	}
-
-	if (sendto(sock, mdns_services_query, sizeof(mdns_services_query), 0,
-	           saddr, saddrlen) < 0)
-		return -1;
-	return 0;
+	return mdns_multicast_send(sock, mdns_services_query, sizeof(mdns_services_query));
 }
 
 static size_t
@@ -552,8 +585,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 	saddr->sa_len = sizeof(addr);
 #endif
 	socklen_t addrlen = sizeof(addr);
-	int ret = recvfrom(sock, buffer, capacity, 0,
-	                   saddr, &addrlen);
+	int ret = recvfrom(sock, buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
@@ -571,7 +603,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 	if (transaction_id || (flags != 0x8400))
 		return 0; //Not a reply to our question
 
-	if (questions > 1)
+	if (questions != 1)
 		return 0;
 
 	int i;
@@ -605,6 +637,8 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 		uint16_t rclass = ntohs(*data++);
 		uint32_t ttl = ntohl(*(uint32_t*)(void*)data); data += 2;
 		uint16_t length = ntohs(*data++);
+		if (length >= (data_size - ofs))
+			return 0;
 
 		if (is_answer && do_callback) {
 			++records;
@@ -625,6 +659,103 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 	                              callback, user_data);
 
 	return records;
+}
+
+static int
+mdns_discovery_listen(int sock, void* address, size_t* address_size, void* buffer, size_t capacity) {
+	if (!address_size || *address_size < sizeof(struct sockaddr))
+		return -1;
+
+	socklen_t addrlen = (socklen_t)*address_size;
+	struct sockaddr* saddr = (struct sockaddr*)address;
+	memset(address, 0, addrlen);
+	saddr->sa_family = AF_INET;
+#ifdef __APPLE__
+	saddr->sa_len = addrlen;
+#endif
+	int ret = recvfrom(sock, buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
+	if (ret <= 0)
+		return 0;
+
+	*address_size = (size_t)addrlen;
+
+	size_t data_size = (size_t)ret;
+	size_t records = 0;
+	uint16_t* data = (uint16_t*)buffer;
+
+	uint16_t transaction_id = ntohs(*data++);
+	uint16_t flags          = ntohs(*data++);
+	uint16_t questions      = ntohs(*data++);
+	uint16_t answer_rrs     = ntohs(*data++);
+	uint16_t authority_rrs  = ntohs(*data++);
+	uint16_t additional_rrs = ntohs(*data++);
+
+	if (transaction_id || flags)
+		return 0; //Not a discovery request
+
+	if (questions != 1)
+		return 0;
+
+	int i;
+	for (i = 0; i < questions; ++i) {
+		size_t ofs = (size_t)((char*)data - (char*)buffer);
+		size_t verify_ofs = 12;
+		//Verify it's a discovery question, _services._dns-sd._udp.local.
+		if (!mdns_string_equal(buffer, data_size, &ofs,
+		                       mdns_services_query, sizeof(mdns_services_query), &verify_ofs))
+			return 0;
+		data = (uint16_t*)((char*)buffer + ofs);
+
+		uint16_t type = ntohs(*data++);
+		uint16_t rclass = ntohs(*data++);
+
+		//Make sure we get a reply based on our PTR question for class IN
+		if ((type != MDNS_RECORDTYPE_PTR) || ((rclass & 0x7FFF) != MDNS_CLASS_IN))
+			return 0;
+	}
+
+	return 1;
+}
+
+static int
+mdns_discovery_answer(int sock, void* address, size_t address_size, void* buffer,
+                      size_t capacity, const char* record, size_t length) {
+	if (capacity < (sizeof(mdns_services_query) + 32 + length))
+		return -1;
+
+	uint16_t* data = buffer;
+	//Basic reply structure
+	memcpy(data, mdns_services_query, sizeof(mdns_services_query));
+	//Flags
+	uint16_t* flags = data + 1;
+	*flags = htons(0x8400);
+	//One answer
+	uint16_t* answers = data + 3;
+	*answers = htons(1);
+
+	//Fill in answer PTR record
+	data = (uint16_t*)((char*)buffer + sizeof(mdns_services_query));
+	//Reference _services._dns-sd._udp.local. string in question
+	uint8_t* refptr = (uint8_t*)data;
+	*refptr++ = 0xC0;
+	*refptr++ = 12;
+	++data;
+	//Type
+	*data++ = htons(12);
+	//Rclass
+	*data++ = htons(1);
+	//TTL
+	*(uint32_t*)data = htonl(10); data += 2;
+	//Record string length
+	uint16_t* record_length = data++;
+	uint8_t* record_data = (uint8_t*)data;
+	size_t remain = capacity - (sizeof(mdns_services_query) + 10);
+	record_data = mdns_string_make(record_data, remain, record, length);
+	*record_length = htons((uint16_t)(record_data - (uint8_t*)data));
+	*record_data++ = 0;
+
+	ptrdiff_t tosend = (char*)record_data - (char*)buffer;
+	return mdns_unicast_send(sock, address, address_size, buffer, (size_t)tosend);
 }
 
 static uint16_t mdns_transaction_id = 0;
@@ -655,42 +786,8 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	//! Unicast response, class IN
 	*data++ = htons(0x8000U | MDNS_CLASS_IN);
 
-	struct sockaddr_storage addr_storage;
-	struct sockaddr_in addr;
-	struct sockaddr_in6 addr6;
-	struct sockaddr* saddr = (struct sockaddr*)&addr_storage;
-	socklen_t saddrlen = sizeof(struct sockaddr_storage);
-	if (getsockname(sock, saddr, &saddrlen))
-		return -1;
-	if (saddr->sa_family == AF_INET6) {
-		memset(&addr6, 0, sizeof(struct sockaddr_in6));
-		addr6.sin6_family = AF_INET6;
-#ifdef __APPLE__
-		addr6.sin6_len = sizeof(struct sockaddr_in6);
-#endif
-		addr6.sin6_addr.s6_addr[0] = 0xFF;
-		addr6.sin6_addr.s6_addr[1] = 0x02;
-		addr6.sin6_addr.s6_addr[15] = 0xFB;
-		addr6.sin6_port = htons((unsigned short)5353);
-		saddr = (struct sockaddr*)&addr6;
-		saddrlen = sizeof(struct sockaddr_in6);
-	}
-	else {
-		memset(&addr, 0, sizeof(struct sockaddr_in));
-		addr.sin_family = AF_INET;
-#ifdef __APPLE__
-		addr.sin_len = sizeof(struct sockaddr_in);
-#endif
-		addr.sin_addr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
-		addr.sin_port = htons((unsigned short)5353);
-		saddr = (struct sockaddr*)&addr;
-		saddrlen = sizeof(struct sockaddr_in);
-	}
-
-	if (sendto(sock, buffer, (char*)data - (char*)buffer, 0,
-	           saddr, saddrlen) < 0)
-		return -1;
-	return 0;
+	ptrdiff_t tosend = (char*)data - (char*)buffer;
+	return mdns_multicast_send(sock, buffer, (size_t)tosend);
 }
 
 static size_t
@@ -705,8 +802,7 @@ mdns_query_recv(int sock, void* buffer, size_t capacity,
 	saddr->sa_len = sizeof(addr);
 #endif
 	socklen_t addrlen = sizeof(addr);
-	int ret = recvfrom(sock, buffer, capacity, 0,
-	                   saddr, &addrlen);
+	int ret = recvfrom(sock, buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
