@@ -941,7 +941,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	header->transaction_id = htons(transaction_id);
 	header->flags = htons(0x8400);
 	header->questions = htons(1);
-	header->answer_rrs = htons(1);//htons(2 + use_ipv4 + use_ipv6);
+	header->answer_rrs = htons(2);//htons(2 + use_ipv4 + use_ipv6);
 	header->authority_rrs = 0;
 	header->additional_rrs = 0;
 
@@ -950,6 +950,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	size_t service_offset = MDNS_POINTER_DIFF(data, buffer);
 	size_t remain = capacity - service_offset;
 	data = mdns_string_make(data, remain, service, service_length);
+	size_t local_offset = MDNS_POINTER_DIFF(data, buffer) - 7;
 	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	if (!data || (remain <= 4))
 		return -1;
@@ -980,6 +981,25 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	*record_length = htons(MDNS_POINTER_DIFF(data, record_length + 1));
 
 	//SRV record
+	data = mdns_string_make_ref(data, remain, service_offset);
+	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+	if (!data || (remain <= 10))
+		return -1;
+	udata = data;
+	*udata++ = htons(MDNS_RECORDTYPE_SRV); //type
+	*udata++ = htons(MDNS_CLASS_IN); //rclass
+	*(uint32_t*)udata = htonl(10); udata += 2; //ttl
+	record_length = udata++; //length
+	*udata++ = htons(0); //priority
+	*udata++ = htons(0); //weight
+	*udata++ = htons(port); //port
+	//Make a string <hostname>.local.
+	data = udata;
+	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+	data = mdns_string_make_with_ref(data, remain, hostname, hostname_length, local_offset);
+	if (!data || (remain <= 10))
+		return -1;
+	*record_length = htons(MDNS_POINTER_DIFF(data, record_length + 1));
 
 	//A record
 
