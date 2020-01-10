@@ -15,7 +15,6 @@
 #  include <netdb.h>
 #endif
 
-static int mdns_sock;
 static char addrbuffer[64];
 static char namebuffer[256];
 static char sendbuffer[256];
@@ -77,7 +76,7 @@ ip_address_to_string(char* buffer, size_t capacity, const struct sockaddr* addr,
 }
 
 static int
-query_callback(const struct sockaddr* from, size_t addrlen,
+query_callback(int sock, const struct sockaddr* from, size_t addrlen,
                mdns_entry_type_t entry, uint16_t transaction_id,
                uint16_t rtype, uint16_t rclass, uint32_t ttl,
                const void* data, size_t size, size_t offset, size_t length,
@@ -141,7 +140,7 @@ query_callback(const struct sockaddr* from, size_t addrlen,
 }
 
 static int
-service_callback(const struct sockaddr* from, size_t addrlen,
+service_callback(int sock, const struct sockaddr* from, size_t addrlen,
                 mdns_entry_type_t entry, uint16_t transaction_id,
                 uint16_t rtype, uint16_t rclass, uint32_t ttl,
                 const void* data, size_t size, size_t offset, size_t length,
@@ -160,12 +159,12 @@ service_callback(const struct sockaddr* from, size_t addrlen,
 		size_t service_length = strlen(service_record->service);
 		if ((service.length == (sizeof(dns_sd) - 1)) && (strcmp(service.str, dns_sd) == 0)) {
 			printf("  --> answer %s\n", service_record->service);
-			mdns_discovery_answer(mdns_sock, from, addrlen, sendbuffer,
+			mdns_discovery_answer(sock, from, addrlen, sendbuffer,
                                   sizeof(sendbuffer), service_record->service, service_length);
 		}
 		else if ((service.length == service_length) && (strcmp(service.str, service_record->service) == 0)) {
 			printf("  --> answer %s.%s port %d\n", service_record->hostname, service_record->service, service_record->port);
-			mdns_query_answer(mdns_sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
+			mdns_query_answer(sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
 			                  transaction_id, service_record->service, service_length,
 			                  service_record->hostname, strlen(service_record->hostname),
 							  service_record->address_ipv4, service_record->address_ipv6,
@@ -224,8 +223,8 @@ main(int argc, const char* const* argv) {
 	}
 
 	int port = (mode == 2) ? MDNS_PORT : 0;
-	mdns_sock = mdns_socket_open_ipv4(port);
-	if (mdns_sock < 0) {
+	int sock = mdns_socket_open_ipv4(port);
+	if (sock < 0) {
 		printf("Failed to open socket: %s\n", strerror(errno));
 		return -1;
 	}
@@ -233,7 +232,7 @@ main(int argc, const char* const* argv) {
 
 	if (mode == 0) {
 		printf("Sending DNS-SD discovery\n");
-		if (mdns_discovery_send(mdns_sock)) {
+		if (mdns_discovery_send(sock)) {
 			printf("Failed to send DNS-DS discovery: %s\n", strerror(errno));
 			goto quit;
 		}
@@ -241,7 +240,7 @@ main(int argc, const char* const* argv) {
 		printf("Reading DNS-SD replies\n");
 		for (int i = 0; i < 10; ++i) {
 			do {
-				records = mdns_discovery_recv(mdns_sock, buffer, capacity, query_callback,
+				records = mdns_discovery_recv(sock, buffer, capacity, query_callback,
 				                              user_data);
 			} while (records);
 			if (records)
@@ -250,7 +249,7 @@ main(int argc, const char* const* argv) {
 		}
 	} else if (mode == 1) {
 		printf("Sending mDNS query: %s\n", service);
-		if (mdns_query_send(mdns_sock, MDNS_RECORDTYPE_PTR,
+		if (mdns_query_send(sock, MDNS_RECORDTYPE_PTR,
 		                    service, strlen(service),
 		                    buffer, capacity)) {
 			printf("Failed to send mDNS query: %s\n", strerror(errno));
@@ -260,7 +259,7 @@ main(int argc, const char* const* argv) {
 		printf("Reading mDNS replies\n");
 		for (int i = 0; i < 5; ++i) {
 			do {
-				records = mdns_query_recv(mdns_sock, buffer, capacity, query_callback, user_data, 1);
+				records = mdns_query_recv(sock, buffer, capacity, query_callback, user_data, 1);
 			} while (records);
 			if (records)
 				i = 0;
@@ -270,7 +269,7 @@ main(int argc, const char* const* argv) {
 		printf("Service mDNS: %s\n", service);
 #ifdef _WIN32
 		unsigned long param = 0;
-		ioctlsocket(mdns_sock, FIONBIO, &param);
+		ioctlsocket(sock, FIONBIO, &param);
 #else
 		const int flags = fcntl(sock, F_GETFL, 0);
 		fcntl(mdns_sock, F_SETFL, flags & ~O_NONBLOCK);
@@ -344,16 +343,16 @@ main(int argc, const char* const* argv) {
 
 		int error_code = 0;
 		do {
-			mdns_socket_listen(mdns_sock, buffer, capacity, service_callback, &service_record);
+			mdns_socket_listen(sock, buffer, capacity, service_callback, &service_record);
 			int error_code_size = sizeof(error_code);
-			getsockopt(mdns_sock, SOL_SOCKET, SO_ERROR, (char*)&error_code, &error_code_size);			
+			getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)&error_code, &error_code_size);			
 		} while (!error_code);
 	}
 
 quit:
 	free(buffer);
 
-	mdns_socket_close(mdns_sock);
+	mdns_socket_close(sock);
 	printf("Closed socket\n");
 
 #ifdef _WIN32

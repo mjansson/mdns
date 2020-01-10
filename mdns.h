@@ -69,7 +69,7 @@ typedef enum mdns_record_type  mdns_record_type_t;
 typedef enum mdns_entry_type   mdns_entry_type_t;
 typedef enum mdns_class        mdns_class_t;
 
-typedef int (* mdns_record_callback_fn)(const struct sockaddr* from, size_t addrlen,
+typedef int (* mdns_record_callback_fn)(int sock, const struct sockaddr* from, size_t addrlen,
                                         mdns_entry_type_t entry, uint16_t transaction_id,
                                         uint16_t type, uint16_t rclass, uint32_t ttl,
                                         const void* data, size_t size, size_t offset, size_t length,
@@ -549,7 +549,7 @@ mdns_string_make_with_ref(void* data, size_t capacity, const char* name, size_t 
 }
 
 static size_t
-mdns_records_parse(const struct sockaddr* from, size_t addrlen, const void* buffer, size_t size,
+mdns_records_parse(int sock, const struct sockaddr* from, size_t addrlen, const void* buffer, size_t size,
                    size_t* offset, mdns_entry_type_t type, uint16_t transaction_id, size_t records,
                    mdns_record_callback_fn callback, void* user_data) {
 	size_t parsed = 0;
@@ -567,7 +567,7 @@ mdns_records_parse(const struct sockaddr* from, size_t addrlen, const void* buff
 
 		if (do_callback) {
 			++parsed;
-			if (callback(from, addrlen, type, transaction_id, rtype, rclass, ttl,
+			if (callback(sock, from, addrlen, type, transaction_id, rtype, rclass, ttl,
 			             buffer, size, *offset, length, user_data))
 				do_callback = 0;
 		}
@@ -719,18 +719,18 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity,
 
 		if (is_answer && do_callback) {
 			++records;
-			if (callback(saddr, addrlen, MDNS_ENTRYTYPE_ANSWER, transaction_id, rtype, rclass, ttl, buffer,
-			             data_size, (size_t)((char*)data - (char*)buffer), length, user_data))
+			if (callback(sock, saddr, addrlen, MDNS_ENTRYTYPE_ANSWER, transaction_id, rtype, rclass, ttl,
+			             buffer, data_size, (size_t)((char*)data - (char*)buffer), length, user_data))
 				do_callback = 0;
 		}
 		data = (void*)((char*)data + length);
 	}
 
 	size_t offset = (size_t)((char*)data - (char*)buffer);
-	records += mdns_records_parse(saddr, addrlen, buffer, data_size, &offset,
+	records += mdns_records_parse(sock, saddr, addrlen, buffer, data_size, &offset,
 	                              MDNS_ENTRYTYPE_AUTHORITY, transaction_id, authority_rrs, 
 	                              callback, user_data);
-	records += mdns_records_parse(saddr, addrlen, buffer, data_size, &offset,
+	records += mdns_records_parse(sock, saddr, addrlen, buffer, data_size, &offset,
 	                              MDNS_ENTRYTYPE_ADDITIONAL, transaction_id, additional_rrs, 
 	                              callback, user_data);
 
@@ -789,7 +789,7 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity,
 			return 0;
 
 		if (callback)
-			callback(saddr, addrlen, MDNS_ENTRYTYPE_QUESTION, transaction_id, rtype, rclass, 0,
+			callback(sock, saddr, addrlen, MDNS_ENTRYTYPE_QUESTION, transaction_id, rtype, rclass, 0,
 			         buffer, data_size, question_offset, length, user_data);
 
 		++parsed;
@@ -913,13 +913,13 @@ mdns_query_recv(int sock, void* buffer, size_t capacity,
 
 	size_t records = 0;
 	size_t offset = MDNS_POINTER_DIFF(data, buffer);
-	records += mdns_records_parse(saddr, addrlen, buffer, data_size, &offset,
+	records += mdns_records_parse(sock, saddr, addrlen, buffer, data_size, &offset,
 	                              MDNS_ENTRYTYPE_ANSWER, transaction_id, answer_rrs, 
 	                              callback, user_data);
-	records += mdns_records_parse(saddr, addrlen, buffer, data_size, &offset,
+	records += mdns_records_parse(sock, saddr, addrlen, buffer, data_size, &offset,
 	                              MDNS_ENTRYTYPE_AUTHORITY, transaction_id, authority_rrs, 
 	                              callback, user_data);
-	records += mdns_records_parse(saddr, addrlen, buffer, data_size, &offset,
+	records += mdns_records_parse(sock, saddr, addrlen, buffer, data_size, &offset,
 	                              MDNS_ENTRYTYPE_ADDITIONAL, transaction_id, additional_rrs, 
 	                              callback, user_data);
 	return records;
