@@ -9,6 +9,7 @@
 #include <errno.h>
 
 #ifdef _WIN32
+#  include <iphlpapi.h>
 #  define sleep(x) Sleep(x * 1000)
 #else
 #  include <netdb.h>
@@ -23,6 +24,8 @@ static mdns_record_txt_t txtbuffer[128];
 typedef struct {
 	const char* service;
 	const char* hostname;
+	uint32_t address_ipv4;
+	uint8_t* address_ipv6;
 	int port;
 } service_record_t;
 
@@ -165,6 +168,7 @@ service_callback(const struct sockaddr* from, size_t addrlen,
 			mdns_query_answer(mdns_sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
 			                  transaction_id, service_record->service, service_length,
 			                  service_record->hostname, strlen(service_record->hostname),
+							  service_record->address_ipv4, service_record->address_ipv6,
 			                  (uint16_t)service_record->port);
 		}
 	}
@@ -272,9 +276,69 @@ main(int argc, const char* const* argv) {
 		fcntl(mdns_sock, F_SETFL, flags & ~O_NONBLOCK);
 #endif
 
+		uint32_t address_ipv4 = 0;
+		uint8_t* address_ipv6 = 0;
+		uint8_t address_ipv6_buffer[16];
+
+#ifdef _WIN32
+		IP_ADAPTER_ADDRESSES* adapter_address = 0;
+		unsigned int address_size = 8000;
+		unsigned int ret;
+		unsigned int num_retries = 4;
+		do {
+			adapter_address = malloc(address_size);
+			ret = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_ANYCAST, 0,
+			                           adapter_address, &address_size);
+			if (ret == ERROR_BUFFER_OVERFLOW) {
+				free(adapter_address);
+				adapter_address = 0;
+			}
+			else {
+				break;
+			}
+		}
+		while (num_retries-- > 0);
+
+		if (!adapter_address || (ret != NO_ERROR)) {
+			free(adapter_address);
+			printf("Failed to get network adapter addresses\n");
+			goto quit;
+		}
+
+		for (PIP_ADAPTER_ADDRESSES adapter = adapter_address; adapter; adapter = adapter->Next) {
+			if (adapter->TunnelType == TUNNEL_TYPE_TEREDO)
+				continue;
+			if (adapter->OperStatus != IfOperStatusUp)
+				continue;
+
+			for (IP_ADAPTER_UNICAST_ADDRESS* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
+				if (unicast->Address.lpSockaddr->sa_family == AF_INET) {
+					struct sockaddr_in* saddr = (struct sockaddr_in*)unicast->Address.lpSockaddr;
+					if ((saddr->sin_addr.S_un.S_un_b.s_b1 != 127) || (saddr->sin_addr.S_un.S_un_b.s_b2 != 0) ||
+					    (saddr->sin_addr.S_un.S_un_b.s_b3 != 0) || (saddr->sin_addr.S_un.S_un_b.s_b4 != 1)) {
+						mdns_string_t addr = ipv4_address_to_string(buffer, capacity, saddr, sizeof(struct sockaddr_in));
+						printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
+						address_ipv4 = saddr->sin_addr.S_un.S_addr;
+					}
+				}
+				else if (unicast->Address.lpSockaddr->sa_family == AF_INET6) {
+					if ((unicast->DadState == NldsPreferred) && !address_ipv6) {
+						struct sockaddr_in6* saddr = (struct sockaddr_in6*)unicast->Address.lpSockaddr;
+						memcpy(address_ipv6_buffer, &saddr->sin6_addr, 16);
+						address_ipv6 = address_ipv6_buffer;
+						mdns_string_t addr = ipv6_address_to_string(buffer, capacity, saddr, sizeof(struct sockaddr_in6));
+						printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
+					}
+				}
+			}
+		}		
+#endif
+
 		service_record_t service_record = {
 			service,
 			hostname,
+			address_ipv4,
+			address_ipv6,
 			service_port
 		};
 

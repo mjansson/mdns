@@ -184,7 +184,8 @@ mdns_query_recv(int sock, void* buffer, size_t capacity,
 static int
 mdns_query_answer(int sock, const void* address, size_t address_size, void* buffer, size_t capacity,
                   uint16_t transaction_id, const char* service, size_t service_length,
-                  const char* hostname, size_t hostname_length, uint16_t port);
+                  const char* hostname, size_t hostname_length, uint32_t ipv4, const uint8_t* ipv6,
+                  uint16_t port);
 
 static mdns_string_t
 mdns_string_extract(const void* buffer, size_t size, size_t* offset,
@@ -927,21 +928,20 @@ mdns_query_recv(int sock, void* buffer, size_t capacity,
 static int
 mdns_query_answer(int sock, const void* address, size_t address_size, void* buffer, size_t capacity,
                   uint16_t transaction_id, const char* service, size_t service_length,
-                  const char* hostname, size_t hostname_length, uint16_t port) {
+                  const char* hostname, size_t hostname_length, uint32_t ipv4, const uint8_t* ipv6,
+                  uint16_t port) {
 	if (capacity < (sizeof(struct mdns_header_t) + 32 + service_length + hostname_length))
 		return -1;
 
-	struct sockaddr_storage saddr;
-	//... determine local IPs
-	int use_ipv4 = 0;
-	int use_ipv6 = 0;
+	int use_ipv4 = (ipv4 != 0);
+	int use_ipv6 = (ipv6 != 0);
 
 	//Basic answer structure
 	struct mdns_header_t* header = (struct mdns_header_t*)buffer;
 	header->transaction_id = htons(transaction_id);
 	header->flags = htons(0x8400);
 	header->questions = htons(1);
-	header->answer_rrs = htons(2);//htons(2 + use_ipv4 + use_ipv6);
+	header->answer_rrs = htons(2 + use_ipv4 + use_ipv6);
 	header->authority_rrs = 0;
 	header->additional_rrs = 0;
 
@@ -1002,9 +1002,34 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	*record_length = htons(MDNS_POINTER_DIFF(data, record_length + 1));
 
 	//A record
+	if (use_ipv4) {
+		data = mdns_string_make_ref(data, remain, service_offset);
+		remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+		if (!data || (remain <= 14))
+			return -1;
+		udata = data;
+		*udata++ = htons(MDNS_RECORDTYPE_A); //type
+		*udata++ = htons(MDNS_CLASS_IN); //rclass
+		*(uint32_t*)udata = htonl(10); udata += 2; //ttl
+		*udata++ = htons(4); //length
+		*(uint32_t*)udata = ipv4; udata += 2; //ipv4
+		data = udata;
+	}
 
 	//AAAA record
-
+	if (use_ipv6) {
+		data = mdns_string_make_ref(data, remain, service_offset);
+		remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+		if (!data || (remain <= 26))
+			return -1;
+		udata = data;
+		*udata++ = htons(MDNS_RECORDTYPE_AAAA); //type
+		*udata++ = htons(MDNS_CLASS_IN); //rclass
+		*(uint32_t*)udata = htonl(10); udata += 2; //ttl
+		*udata++ = htons(16); //length
+		memcpy(udata, ipv6, 16);
+		data = MDNS_POINTER_OFFSET(udata, 16);
+	}
 
 	size_t tosend = MDNS_POINTER_DIFF(data, buffer);
 	return mdns_unicast_send(sock, address, address_size, buffer, tosend);
