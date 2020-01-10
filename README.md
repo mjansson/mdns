@@ -16,4 +16,4 @@ The library does DNS-SD discovery and service as well as single record mDNS quer
 The mdns.c file contains a test executable implementation using the library to do DNS-SD and mDNS queries.
 
 ### Microsoft compiler
-`cl mdns.c /Zi /Fdmdns.pdb /link /out:mdns.exe ws2_32.lib`
+`cl mdns.c /Zi /Fdmdns.pdb /link /out:mdns.exe ws2_32.lib iphlpapi.lib`

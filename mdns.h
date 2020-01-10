@@ -71,7 +71,7 @@ typedef enum mdns_class        mdns_class_t;
 
 typedef int (* mdns_record_callback_fn)(int sock, const struct sockaddr* from, size_t addrlen,
                                         mdns_entry_type_t entry, uint16_t transaction_id,
-                                        uint16_t type, uint16_t rclass, uint32_t ttl,
+                                        uint16_t rtype, uint16_t rclass, uint32_t ttl,
                                         const void* data, size_t size, size_t offset, size_t length,
                                         void* user_data);
 
@@ -978,7 +978,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	if (!data || (remain <= 10))
 		return -1;
-	*record_length = htons(MDNS_POINTER_DIFF(data, record_length + 1));
+	*record_length = htons((uint16_t)MDNS_POINTER_DIFF(data, record_length + 1));
 
 	//SRV record
 	data = mdns_string_make_ref(data, remain, service_offset);
@@ -999,7 +999,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	data = mdns_string_make_with_ref(data, remain, hostname, hostname_length, local_offset);
 	if (!data || (remain <= 10))
 		return -1;
-	*record_length = htons(MDNS_POINTER_DIFF(data, record_length + 1));
+	*record_length = htons((uint16_t)MDNS_POINTER_DIFF(data, record_length + 1));
 
 	//A record
 	if (use_ipv4) {
