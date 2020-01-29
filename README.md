@@ -55,5 +55,15 @@ See the test executable implementation for more details on how to handle the par
 ## Test executable
 The `mdns.c` file contains a test executable implementation using the library to do DNS-SD and mDNS queries.
 
-### Microsoft compiler
+### Windows
+
+#### Microsoft compiler
 `cl mdns.c /Zi /Fdmdns.pdb /link /out:mdns.exe ws2_32.lib iphlpapi.lib`
+
+### Linux
+
+#### GCC
+`gcc -o mdns mdns.c`
+
+#### clang
+`clang -o mdns mdns.c`

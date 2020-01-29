@@ -272,7 +272,7 @@ main(int argc, const char* const* argv) {
 		ioctlsocket(sock, FIONBIO, &param);
 #else
 		const int flags = fcntl(sock, F_GETFL, 0);
-		fcntl(mdns_sock, F_SETFL, flags & ~O_NONBLOCK);
+		fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
 #endif
 
 		uint32_t address_ipv4 = 0;
@@ -345,7 +345,7 @@ main(int argc, const char* const* argv) {
 		do {
 			mdns_socket_listen(sock, buffer, capacity, service_callback, &service_record);
 			int error_code_size = sizeof(error_code);
-			getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)&error_code, &error_code_size);			
+			getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)&error_code, (socklen_t*)&error_code_size);			
 		} while (!error_code);
 	}
 
