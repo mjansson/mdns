@@ -53,7 +53,7 @@ If the service record name is a service you provide, use `mdns_query_answer` to 
 See the test executable implementation for more details on how to handle the parameters to the given functions.
 
 ## Test executable
-The `mdns.c` file contains a test executable implementation using the library to do DNS-SD and mDNS queries.
+The `mdns.c` file contains a test executable implementation using the library to do DNS-SD and mDNS queries. Compile into an executable and run to see command line options for discovery, query and service modes.
 
 ### Windows
 
