@@ -514,7 +514,7 @@ mdns_string_make(void* data, size_t capacity, const char* name, size_t length) {
 	}
 	if (last_pos < length) {
 		size_t sublength = length - last_pos;
-		if (sublength < capacity) {
+		if (sublength < remain) {
 			*dest = (unsigned char)sublength;
 			memcpy(dest + 1, name + last_pos, sublength);
 			dest += sublength + 1;
