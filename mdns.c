@@ -157,12 +157,12 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen,
 		const char dns_sd[] = "_services._dns-sd._udp.local.";
 		const service_record_t* service_record = (const service_record_t*)user_data;
 		size_t service_length = strlen(service_record->service);
-		if ((service.length == (sizeof(dns_sd) - 1)) && (strcmp(service.str, dns_sd) == 0)) {
+		if ((service.length == (sizeof(dns_sd) - 1)) && (strncmp(service.str, dns_sd, sizeof(dns_sd) - 1) == 0)) {
 			printf("  --> answer %s\n", service_record->service);
 			mdns_discovery_answer(sock, from, addrlen, sendbuffer,
                                   sizeof(sendbuffer), service_record->service, service_length);
 		}
-		else if ((service.length == service_length) && (strcmp(service.str, service_record->service) == 0)) {
+		else if ((service.length == service_length) && (strncmp(service.str, service_record->service, service_length) == 0)) {
 			printf("  --> answer %s.%s port %d\n", service_record->hostname, service_record->service, service_record->port);
 			mdns_query_answer(sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
 			                  transaction_id, service_record->service, service_length,
