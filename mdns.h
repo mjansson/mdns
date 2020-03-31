@@ -29,6 +29,10 @@
 #include <netinet/in.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MDNS_INVALID_POS ((size_t)-1)
 
 #define MDNS_STRING_CONST(s) (s), (sizeof((s))-1)
@@ -1166,4 +1170,8 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 
 #ifdef _WIN32
 #undef strncasecmp
+#endif
+
+#ifdef __cplusplus
+}
 #endif
