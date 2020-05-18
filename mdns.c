@@ -212,19 +212,27 @@ open_client_sockets(int* sockets, int max_sockets) {
 				    (saddr->sin_addr.S_un.S_un_b.s_b2 != 0) ||
 				    (saddr->sin_addr.S_un.S_un_b.s_b3 != 0) ||
 				    (saddr->sin_addr.S_un.S_un_b.s_b4 != 1)) {
+					int log_addr = 0;
 					if (first_ipv4) {
 						service_address_ipv4 = saddr->sin_addr.S_un.S_addr;
 						first_ipv4 = 0;
+						log_addr = 1;
 					}
 					if (num_sockets < max_sockets) {
+						saddr->sin_port = 0;
 						int sock = mdns_socket_open_ipv4(saddr);
 						if (sock >= 0) {
-							char buffer[128];
-							mdns_string_t addr = ipv4_address_to_string(
-							    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in));
-							printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 							sockets[num_sockets++] = sock;
+							log_addr = 1;
+						} else {
+							log_addr = 0;
 						}
+					}
+					if (log_addr) {
+						char buffer[128];
+						mdns_string_t addr = ipv4_address_to_string(
+						    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in));
+						printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 					}
 				}
 			} else if (unicast->Address.lpSockaddr->sa_family == AF_INET6) {
@@ -236,19 +244,27 @@ open_client_sockets(int* sockets, int max_sockets) {
 				if ((unicast->DadState == NldsPreferred) &&
 				    memcmp(saddr->sin6_addr.s6_addr, localhost, 16) &&
 				    memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
+					int log_addr = 0;
 					if (first_ipv6) {
 						memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
 						first_ipv6 = 0;
+						log_addr = 1;
 					}
 					if (num_sockets < max_sockets) {
+						saddr->sin6_port = 0;
 						int sock = mdns_socket_open_ipv6(saddr);
 						if (sock >= 0) {
-							char buffer[128];
-							mdns_string_t addr = ipv6_address_to_string(
-							    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in6));
-							printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 							sockets[num_sockets++] = sock;
+							log_addr = 1;
+						} else {
+							log_addr = 0;
 						}
+					}
+					if (log_addr) {
+						char buffer[128];
+						mdns_string_t addr = ipv6_address_to_string(
+						    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in6));
+						printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 					}
 				}
 			}
@@ -274,19 +290,27 @@ open_client_sockets(int* sockets, int max_sockets) {
 		if (ifa->ifa_addr->sa_family == AF_INET) {
 			struct sockaddr_in* saddr = (struct sockaddr_in*)ifa->ifa_addr;
 			if (saddr->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
+				int log_addr = 0;
 				if (first_ipv4) {
 					service_address_ipv4 = saddr->sin_addr.s_addr;
 					first_ipv4 = 0;
+					log_addr = 1;
 				}
 				if (num_sockets < max_sockets) {
+					saddr->sin_port = 0;
 					int sock = mdns_socket_open_ipv4(saddr);
 					if (sock >= 0) {
-						char buffer[128];
-						mdns_string_t addr = ipv4_address_to_string(
-						    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in));
-						printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 						sockets[num_sockets++] = sock;
+						log_addr = 1;
+					} else {
+						log_addr = 0;
 					}
+				}
+				if (log_addr) {
+					char buffer[128];
+					mdns_string_t addr = ipv4_address_to_string(
+					    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in));
+					printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 				}
 			}
 		} else if (ifa->ifa_addr->sa_family == AF_INET6) {
@@ -297,19 +321,27 @@ open_client_sockets(int* sockets, int max_sockets) {
 			                                                 0, 0, 0xff, 0xff, 0x7f, 0, 0, 1};
 			if (memcmp(saddr->sin6_addr.s6_addr, localhost, 16) &&
 			    memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
+				int log_addr = 0;
 				if (first_ipv6) {
 					memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
 					first_ipv6 = 0;
+					log_addr = 1;
 				}
 				if (num_sockets < max_sockets) {
+					saddr->sin6_port = 0;
 					int sock = mdns_socket_open_ipv6(saddr);
 					if (sock >= 0) {
-						char buffer[128];
-						mdns_string_t addr = ipv6_address_to_string(
-						    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in6));
-						printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 						sockets[num_sockets++] = sock;
+						log_addr = 1;
+					} else {
+						log_addr = 0;
 					}
+				}
+				if (log_addr) {
+					char buffer[128];
+					mdns_string_t addr = ipv6_address_to_string(
+					    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in6));
+					printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 				}
 			}
 		}
@@ -345,7 +377,11 @@ open_service_sockets(int* sockets, int max_sockets) {
 		struct sockaddr_in sock_addr;
 		memset(&sock_addr, 0, sizeof(struct sockaddr_in));
 		sock_addr.sin_family = AF_INET;
-		//sock_addr.sin_addr = in4addr_any;
+#ifdef _WIN32
+		sock_addr.sin_addr = in4addr_any;
+#else
+		sock_addr.sin_addr.s_addr = INADDR_ANY;
+#endif
 		sock_addr.sin_port = htons(MDNS_PORT);
 #ifdef __APPLE__
 		sock_addr.sin_len = sizeof(struct sockaddr_in);
@@ -528,6 +564,7 @@ main(int argc, const char* const* argv) {
 	int service_port = 42424;
 
 #ifdef _WIN32
+
 	WORD versionWanted = MAKEWORD(1, 1);
 	WSADATA wsaData;
 	if (WSAStartup(versionWanted, &wsaData)) {
@@ -535,10 +572,18 @@ main(int argc, const char* const* argv) {
 		return -1;
 	}
 
-	char hostname_buffer[128];
+	char hostname_buffer[256];
 	DWORD hostname_size = (DWORD)sizeof(hostname_buffer);
 	if (GetComputerNameA(hostname_buffer, &hostname_size))
 		hostname = hostname_buffer;
+
+#else
+
+	char hostname_buffer[256];
+	size_t hostname_size = sizeof(hostname_buffer);
+	if (gethostname(hostname_buffer, hostname_size) == 0)
+		hostname = hostname_buffer;
+
 #endif
 
 	for (int iarg = 0; iarg < argc; ++iarg) {
