@@ -13,6 +13,7 @@
 #define sleep(x) Sleep(x * 1000)
 #else
 #include <netdb.h>
+#include <ifaddrs.h>
 #endif
 
 static char addrbuffer[64];
@@ -172,6 +173,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 	int num_sockets = 0;
 
 #ifdef _WIN32
+
 	IP_ADAPTER_ADDRESSES* adapter_address = 0;
 	unsigned int address_size = 8000;
 	unsigned int ret;
@@ -254,6 +256,67 @@ open_client_sockets(int* sockets, int max_sockets) {
 	}
 
 	free(adapter_address);
+
+#else
+
+	struct ifaddrs* ifaddr = 0;
+	struct ifaddrs* ifa = 0;
+
+	if (getifaddrs(&ifaddr) < 0)
+		printf("Unable to get interface addresses\n");
+
+	int first_ipv4 = 1;
+	int first_ipv6 = 1;
+	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+		if (!ifa->ifa_addr)
+			continue;
+
+		if (ifa->ifa_addr->sa_family == AF_INET) {
+			struct sockaddr_in* saddr = (struct sockaddr_in*)ifa->ifa_addr;
+			if (saddr->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
+				if (first_ipv4) {
+					service_address_ipv4 = saddr->sin_addr.s_addr;
+					first_ipv4 = 0;
+				}
+				if (num_sockets < max_sockets) {
+					int sock = mdns_socket_open_ipv4(saddr);
+					if (sock >= 0) {
+						char buffer[128];
+						mdns_string_t addr = ipv4_address_to_string(
+						    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in));
+						printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
+						sockets[num_sockets++] = sock;
+					}
+				}
+			}
+		} else if (ifa->ifa_addr->sa_family == AF_INET6) {
+			struct sockaddr_in6* saddr = (struct sockaddr_in6*)ifa->ifa_addr;
+			static const unsigned char localhost[] = {0, 0, 0, 0, 0, 0, 0, 0,
+			                                          0, 0, 0, 0, 0, 0, 0, 1};
+			static const unsigned char localhost_mapped[] = {0, 0, 0,    0,    0,    0, 0, 0,
+			                                                 0, 0, 0xff, 0xff, 0x7f, 0, 0, 1};
+			if (memcmp(saddr->sin6_addr.s6_addr, localhost, 16) &&
+			    memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
+				if (first_ipv6) {
+					memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
+					first_ipv6 = 0;
+				}
+				if (num_sockets < max_sockets) {
+					int sock = mdns_socket_open_ipv6(saddr);
+					if (sock >= 0) {
+						char buffer[128];
+						mdns_string_t addr = ipv6_address_to_string(
+						    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in6));
+						printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
+						sockets[num_sockets++] = sock;
+					}
+				}
+			}
+		}
+	}
+
+	freeifaddrs(ifaddr);
+
 #endif
 
 	for (int isock = 0; isock < num_sockets; ++isock) {
@@ -282,7 +345,7 @@ open_service_sockets(int* sockets, int max_sockets) {
 		struct sockaddr_in sock_addr;
 		memset(&sock_addr, 0, sizeof(struct sockaddr_in));
 		sock_addr.sin_family = AF_INET;
-		sock_addr.sin_addr = in4addr_any;
+		//sock_addr.sin_addr = in4addr_any;
 		sock_addr.sin_port = htons(MDNS_PORT);
 #ifdef __APPLE__
 		sock_addr.sin_len = sizeof(struct sockaddr_in);
