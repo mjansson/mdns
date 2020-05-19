@@ -478,23 +478,33 @@ send_mdns_query(const char* service) {
 			printf("Failed to send mDNS query: %s\n", strerror(errno));
 	}
 
-	// This is a simple implementation that loops for 10 seconds or as long as we get replies
-	// A real world implementation would probably use select, poll or similar syscall to wait
-	// until data is available on a socket and then read it
+	// This is a simple implementation that loops for 5 seconds or as long as we get replies
 	printf("Reading mDNS query replies\n");
-	for (int i = 0; i < 10; ++i) {
-		size_t records;
-		do {
-			records = 0;
-			for (int isock = 0; isock < num_sockets; ++isock) {
-				if (transaction_id[isock] > 0)
-					records += mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
-					                           user_data, transaction_id[isock]);
+	int nfds = 0;
+	fd_set readfs;
+	FD_ZERO(&readfs);
+	for (int isock = 0; isock < num_sockets; ++isock) {
+		if (transaction_id[isock] > 0) {
+			if (sockets[isock] >= nfds)
+				nfds = sockets[isock] + 1;
+			FD_SET(sockets[isock], &readfs);
+		}
+	}
+
+	struct timeval timeout;
+	timeout.tv_sec = 5;
+	timeout.tv_usec = 0;
+	while (select(nfds, &readfs, 0, 0, &timeout) >= 0) {
+		size_t records = 0;
+		for (int isock = 0; isock < num_sockets; ++isock) {
+			if (FD_ISSET(sockets[isock], &readfs)) {
+				records += mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
+				                           user_data, transaction_id[isock]);
 			}
-		} while (records);
-		if (records)
-			i = 0;
-		sleep(1);
+			FD_SET(sockets[isock], &readfs);
+		}
+		if (!records)
+			break;
 	}
 
 	free(buffer);
@@ -525,20 +535,24 @@ service_mdns(const char* hostname, const char* service, int service_port) {
 	service_record_t service_record = {service, hostname, service_address_ipv4,
 	                                   service_address_ipv6, service_port};
 
-	// This is a crude implementation that loops and checks for incoming queries, then sleeps
-	// for one second. A real world implementation would probably use select, poll or similar
-	// syscall to wait until data is available on a socket and then read it
-	int error_code = 0;
-	do {
-		for (int isock = 0; isock < num_sockets; ++isock) {
-			mdns_socket_listen(sockets[isock], buffer, capacity, service_callback, &service_record);
+	// This is a crude implementation that checks for incoming queries
+	int nfds = 0;
+	fd_set readfs;
+	FD_ZERO(&readfs);
+	for (int isock = 0; isock < num_sockets; ++isock) {
+		if (sockets[isock] >= nfds)
+			nfds = sockets[isock] + 1;
+		FD_SET(sockets[isock], &readfs);
+	}
 
-			int error_code_size = sizeof(error_code);
-			getsockopt(sockets[isock], SOL_SOCKET, SO_ERROR, (char*)&error_code,
-			           (socklen_t*)&error_code_size);
+	while (select(nfds, &readfs, 0, 0, 0) >= 0) {
+		for (int isock = 0; isock < num_sockets; ++isock) {
+			if (FD_ISSET(sockets[isock], &readfs)) {
+				mdns_socket_listen(sockets[isock], buffer, capacity, service_callback, &service_record);
+			}
+			FD_SET(sockets[isock], &readfs);
 		}
-		sleep(1);
-	} while (num_sockets && !error_code);
+	}
 
 	free(buffer);
 
