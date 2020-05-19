@@ -427,24 +427,35 @@ send_dns_sd(void) {
 	size_t capacity = 2048;
 	void* buffer = malloc(capacity);
 	void* user_data = 0;
+	size_t records;
 
-	// This is a simple implementation that loops for 10 seconds or as long as we get replies
-	// A real world implementation would probably use select, poll or similar syscall to wait
-	// until data is available on a socket and then read it
+	// This is a simple implementation that loops for 5 seconds or as long as we get replies
 	printf("Reading DNS-SD replies\n");
-	for (int i = 0; i < 10; ++i) {
-		size_t records;
-		do {
-			records = 0;
+	do {
+		struct timeval timeout;
+		timeout.tv_sec = 5;
+		timeout.tv_usec = 0;
+
+		int nfds = 0;
+		fd_set readfs;
+		FD_ZERO(&readfs);
+		for (int isock = 0; isock < num_sockets; ++isock) {
+			if (sockets[isock] >= nfds)
+				nfds = sockets[isock] + 1;
+			FD_SET(sockets[isock], &readfs);
+		}
+
+		records = 0;
+		if (select(nfds, &readfs, 0, 0, &timeout) >= 0) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
-				records += mdns_discovery_recv(sockets[isock], buffer, capacity, query_callback,
-				                               user_data);
+				if (FD_ISSET(sockets[isock], &readfs)) {
+					records += mdns_discovery_recv(sockets[isock], buffer, capacity, query_callback,
+					                               user_data);
+				}
+				FD_SET(sockets[isock], &readfs);
 			}
-		} while (records);
-		if (records)
-			i = 0;
-		sleep(1);
-	}
+		}
+	} while (records);
 
 	free(buffer);
 
@@ -469,6 +480,7 @@ send_mdns_query(const char* service) {
 	size_t capacity = 2048;
 	void* buffer = malloc(capacity);
 	void* user_data = 0;
+	size_t records;
 
 	printf("Sending mDNS query: %s\n", service);
 	for (int isock = 0; isock < num_sockets; ++isock) {
@@ -480,32 +492,31 @@ send_mdns_query(const char* service) {
 
 	// This is a simple implementation that loops for 5 seconds or as long as we get replies
 	printf("Reading mDNS query replies\n");
-	int nfds = 0;
-	fd_set readfs;
-	FD_ZERO(&readfs);
-	for (int isock = 0; isock < num_sockets; ++isock) {
-		if (transaction_id[isock] > 0) {
+	do {
+		struct timeval timeout;
+		timeout.tv_sec = 5;
+		timeout.tv_usec = 0;
+
+		int nfds = 0;
+		fd_set readfs;
+		FD_ZERO(&readfs);
+		for (int isock = 0; isock < num_sockets; ++isock) {
 			if (sockets[isock] >= nfds)
 				nfds = sockets[isock] + 1;
 			FD_SET(sockets[isock], &readfs);
 		}
-	}
 
-	struct timeval timeout;
-	timeout.tv_sec = 5;
-	timeout.tv_usec = 0;
-	while (select(nfds, &readfs, 0, 0, &timeout) >= 0) {
-		size_t records = 0;
-		for (int isock = 0; isock < num_sockets; ++isock) {
-			if (FD_ISSET(sockets[isock], &readfs)) {
-				records += mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
-				                           user_data, transaction_id[isock]);
+		records = 0;
+		if (select(nfds, &readfs, 0, 0, &timeout) >= 0) {
+			for (int isock = 0; isock < num_sockets; ++isock) {
+				if (FD_ISSET(sockets[isock], &readfs)) {
+					records += mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
+					                           user_data, transaction_id[isock]);
+				}
+				FD_SET(sockets[isock], &readfs);
 			}
-			FD_SET(sockets[isock], &readfs);
 		}
-		if (!records)
-			break;
-	}
+	} while (records);
 
 	free(buffer);
 
@@ -536,21 +547,25 @@ service_mdns(const char* hostname, const char* service, int service_port) {
 	                                   service_address_ipv6, service_port};
 
 	// This is a crude implementation that checks for incoming queries
-	int nfds = 0;
-	fd_set readfs;
-	FD_ZERO(&readfs);
-	for (int isock = 0; isock < num_sockets; ++isock) {
-		if (sockets[isock] >= nfds)
-			nfds = sockets[isock] + 1;
-		FD_SET(sockets[isock], &readfs);
-	}
-
-	while (select(nfds, &readfs, 0, 0, 0) >= 0) {
+	while (1) {
+		int nfds = 0;
+		fd_set readfs;
+		FD_ZERO(&readfs);
 		for (int isock = 0; isock < num_sockets; ++isock) {
-			if (FD_ISSET(sockets[isock], &readfs)) {
-				mdns_socket_listen(sockets[isock], buffer, capacity, service_callback, &service_record);
-			}
+			if (sockets[isock] >= nfds)
+				nfds = sockets[isock] + 1;
 			FD_SET(sockets[isock], &readfs);
+		}
+
+		if (select(nfds, &readfs, 0, 0, 0) >= 0) {
+			for (int isock = 0; isock < num_sockets; ++isock) {
+				if (FD_ISSET(sockets[isock], &readfs)) {
+					mdns_socket_listen(sockets[isock], buffer, capacity, service_callback, &service_record);
+				}
+				FD_SET(sockets[isock], &readfs);
+			}
+		} else {
+			break;
 		}
 	}
 
