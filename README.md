@@ -20,7 +20,7 @@ The `mdns.c` test executable file demostrates the use of all features, including
 
 Socket for mDNS communication can either be opened by the library by using `mdns_socket_open_ipv4` or `mdns_socket_open_ipv6`, or by initializing an existing socket with `mdns_socket_setup_ipv4` or `mdns_socket_setup_ipv6`.
 
-To do discovery on the default network interface, you can pass 0 as socket address int the socket create/setup functions. This will bind the socket to the default network interface. Otherwise you should enumerate the available interfaces and pass the appropriate socket address to the create/setup function. See the example program in `mdns.c` for an example implemention of doing this for both IPv4 and IPv6.
+To do discovery on the default network interface, you can pass 0 as socket address in the socket create/setup functions. This will bind the socket to the default network interface. Otherwise you should enumerate the available interfaces and pass the appropriate socket address to the create/setup function. See the example program in `mdns.c` for an example implemention of doing this for both IPv4 and IPv6.
 
 If you want to do only discovery and send queries you can pass in 0 as port in the socket address in the socket create/setup functions. This will bind the socket to a random free port in user range. This is also the default when passing a null socket address.
 
