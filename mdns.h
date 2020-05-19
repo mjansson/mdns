@@ -767,15 +767,18 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 		return 0;
 
 	size_t data_size = (size_t)ret;
-	size_t records = 0;
 	uint16_t* data = (uint16_t*)buffer;
 
 	uint16_t transaction_id = ntohs(*data++);
 	uint16_t flags = ntohs(*data++);
 	uint16_t questions = ntohs(*data++);
+	/*
+	This data is unused at the moment, skip
 	uint16_t answer_rrs = ntohs(*data++);
 	uint16_t authority_rrs = ntohs(*data++);
 	uint16_t additional_rrs = ntohs(*data++);
+	*/
+	data += 3;
 
 	size_t parsed = 0;
 	for (int iquestion = 0; iquestion < questions; ++iquestion) {
