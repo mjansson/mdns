@@ -20,9 +20,11 @@ The `mdns.c` test executable file demostrates the use of all features, including
 
 Socket for mDNS communication can either be opened by the library by using `mdns_socket_open_ipv4` or `mdns_socket_open_ipv6`, or by initializing an existing socket with `mdns_socket_setup_ipv4` or `mdns_socket_setup_ipv6`.
 
-If you want to do only discovery and send queries you can pass in 0 as port in the socket create/setup functions. This will bind the socket to a random free port in user range.
+To do discovery on the default network interface, you can pass 0 as socket address int the socket create/setup functions. This will bind the socket to the default network interface. Otherwise you should enumerate the available interfaces and pass the appropriate socket address to the create/setup function. See the example program in `mdns.c` for an example implemention of doing this for both IPv4 and IPv6.
 
-If you want to do mDNS service response to incoming queries, you need to pass in MDNS_PORT to the socket create/setup functions to allow the socket to receive incoming query packets.
+If you want to do only discovery and send queries you can pass in 0 as port in the socket address in the socket create/setup functions. This will bind the socket to a random free port in user range. This is also the default when passing a null socket address.
+
+If you want to do mDNS service response to incoming queries, you need to pass in MDNS_PORT to the socket create/setup functions to allow the socket to receive incoming query packets. This also requires a valid socket address to be passed in. However, since sockets by default receive data from all available network interfaces, you do not need to enumerate interfaces to do service response on all interfaces. See the example program in `mdns.c` for an example of setting up a service socket for both IPv4 and IPv6.
 
 The socket is initialized with multicast membership (including loopback) and set to non-blocking mode.
 
@@ -36,13 +38,13 @@ To read discovery responses use `mdns_discovery_recv`. All records received sinc
 
 ### Query
 
-To send a mDNS query for a single record use `mdns_query_send`. This will send a single multicast packet for the given record (since question record, for example `_http._tcp.local.`).
+To send a mDNS query for a single record use `mdns_query_send`. This will send a single multicast packet for the given record (since question record, for example `_http._tcp.local.`). The function returns the transaction id associated with this query, which can be used to filter responses in `mdns_query_recv`.
 
-To read query responses use `mdns_query_recv`. All records received since last call will be piped to the callback supplied in the function call. If `only_last_query` parameter is non-zero the function will filter out any response with a transaction id that does not match the last query sent. The entry type will be one of `MDNS_ENTRYTYPE_ANSWER`, `MDNS_ENTRYTYPE_AUTHORITY` and `MDNS_ENTRYTYPE_ADDITIONAL`.
+To read query responses use `mdns_query_recv`. All records received since last call will be piped to the callback supplied in the function call. If `only_transaction_id` parameter is non-zero the function will filter out any response with a transaction id that does not match the given transaction id. The entry type will be one of `MDNS_ENTRYTYPE_ANSWER`, `MDNS_ENTRYTYPE_AUTHORITY` and `MDNS_ENTRYTYPE_ADDITIONAL`.
 
 ### Service
 
-To listen for incoming DNS-SD requests and mDNS queries the socket should be opened on port `5353` (defined in header as `MDNS_PORT`) in call to the socket open/setup functions. Then call `mdns_socket_listen` either on notification of incoming data, or by setting blocking mode and calling `mdns_socket_listen` to block until data is available and parsed.
+To listen for incoming DNS-SD requests and mDNS queries the socket should be opened on port `5353` (defined in header as `MDNS_PORT`) in the call to the socket open/setup functions. Then call `mdns_socket_listen` either on notification of incoming data, or by setting blocking mode and calling `mdns_socket_listen` to block until data is available and parsed.
 
 The entry type passed to the callback will be `MDNS_ENTRYTYPE_QUESTION` and record type `MDNS_RECORDTYPE_PTR`. Use the `mdns_record_parse_ptr` function to get the name string of the service record that was asked for.
 

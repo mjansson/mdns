@@ -351,16 +351,6 @@ open_client_sockets(int* sockets, int max_sockets) {
 
 #endif
 
-	for (int isock = 0; isock < num_sockets; ++isock) {
-#ifdef _WIN32
-		unsigned long param = 1;
-		ioctlsocket(sockets[isock], FIONBIO, &param);
-#else
-		const int flags = fcntl(sockets[isock], F_GETFL, 0);
-		fcntl(sockets[isock], F_SETFL, flags | O_NONBLOCK);
-#endif
-	}
-
 	return num_sockets;
 }
 
@@ -468,6 +458,7 @@ send_dns_sd(void) {
 static int
 send_mdns_query(const char* service) {
 	int sockets[32];
+	int transaction_id[32];
 	int num_sockets = open_client_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]));
 	if (num_sockets <= 0) {
 		printf("Failed to open any client sockets\n");
@@ -481,8 +472,9 @@ send_mdns_query(const char* service) {
 
 	printf("Sending mDNS query: %s\n", service);
 	for (int isock = 0; isock < num_sockets; ++isock) {
-		if (mdns_query_send(sockets[isock], MDNS_RECORDTYPE_PTR, service, strlen(service), buffer,
-		                    capacity))
+		transaction_id[isock] = mdns_query_send(sockets[isock], MDNS_RECORDTYPE_PTR, service, strlen(service),
+		                                        buffer, capacity);
+		if (transaction_id[isock] <= 0)
 			printf("Failed to send mDNS query: %s\n", strerror(errno));
 	}
 
@@ -495,8 +487,9 @@ send_mdns_query(const char* service) {
 		do {
 			records = 0;
 			for (int isock = 0; isock < num_sockets; ++isock) {
-				records +=
-				    mdns_query_recv(sockets[isock], buffer, capacity, query_callback, user_data, 1);
+				if (transaction_id[isock] > 0)
+					records += mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
+					                           user_data, transaction_id[isock]);
 			}
 		} while (records);
 		if (records)

@@ -121,6 +121,8 @@ struct mdns_header_t {
 	uint16_t additional_rrs;
 };
 
+// mDNS/DNS-SD public API
+
 //! Open and setup a IPv4 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for INADDR_ANY.
 //  To send discovery requests and queries set 0 as port to assign a random user level port (also
@@ -158,44 +160,53 @@ static void
 mdns_socket_close(int sock);
 
 //! Listen for incoming multicast DNS-SD and mDNS query requests. The socket should have been
-//  opened on port MDNS_PORT using one of the mdns open or setup socket functions.
+//  opened on port MDNS_PORT using one of the mdns open or setup socket functions. Returns the
+//  number of queries parsed.
 static size_t
 mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback_fn callback,
                    void* user_data);
 
-//! Send a multicast DNS-SD reqeuest on the given socket to discover available services.
+//! Send a multicast DNS-SD reqeuest on the given socket to discover available services. Returns
+//  0 on success, or <0 if error.
 static int
 mdns_discovery_send(int sock);
 
 //! Recieve unicast responses to a DNS-SD sent with mdns_discovery_send. Any data will be piped to
-//  the given callback for parsing.
+//  the given callback for parsing. Returns the number of responses parsed.
 static size_t
 mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn callback,
                     void* user_data);
 
-//! Send a unicast DNS-SD answer with a single record to the given address.
+//! Send a unicast DNS-SD answer with a single record to the given address. Returns 0 if success,
+//  or <0 if error.
 static int
 mdns_discovery_answer(int sock, const void* address, size_t address_size, void* buffer,
                       size_t capacity, const char* record, size_t length);
 
 //! Send a multicast mDNS query on the given socket for the given service name. The supplied buffer
-//  will be used to build the query packet.
+//  will be used to build the query packet. Returns the transaction ID for the query sent (always >0),
+//  or <0 if error.
 static int
 mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t length, void* buffer,
                 size_t capacity);
 
-//! Receive unicast responses to a mDNS query sent with mdns_discovery_recv. Any data will be piped
-//  to the given callback for parsing.
+//! Receive unicast responses to a mDNS query sent with mdns_discovery_recv, optionally filtering
+//  out any responses not matching the given transaction ID. Set the transaction ID to 0 to parse
+//  all responses, even if it is not matching any sent query. Any data will be piped to the given
+//  callback for parsing. Returns the number of responses parsed.
 static size_t
 mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn callback,
                 void* user_data, int only_last_query);
 
-//! Send a unicast mDNS query answer with a single record to the given address.
+//! Send a unicast mDNS query answer with a single record to the given address. Returns 0 if
+//  success, or <0 if error.
 static int
 mdns_query_answer(int sock, const void* address, size_t address_size, void* buffer, size_t capacity,
                   uint16_t transaction_id, const char* service, size_t service_length,
                   const char* hostname, size_t hostname_length, uint32_t ipv4, const uint8_t* ipv6,
                   uint16_t port, const char* txt, size_t txt_length);
+
+// Internal functions
 
 static mdns_string_t
 mdns_string_extract(const void* buffer, size_t size, size_t* offset, char* str, size_t capacity);
@@ -847,9 +858,12 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	if (capacity < (17 + length))
 		return -1;
 
+	uint16_t transaction_id = ++mdns_transaction_id;
+	if (!transaction_id)
+		transaction_id = ++mdns_transaction_id;
 	uint16_t* data = (uint16_t*)buffer;
 	// Transaction ID
-	*data++ = htons(++mdns_transaction_id);
+	*data++ = htons(transaction_id);
 	// Flags
 	*data++ = 0;
 	// Questions
@@ -868,12 +882,14 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	*data++ = htons(0x8000U | MDNS_CLASS_IN);
 
 	ptrdiff_t tosend = (char*)data - (char*)buffer;
-	return mdns_multicast_send(sock, buffer, (size_t)tosend);
+	if (mdns_multicast_send(sock, buffer, (size_t)tosend))
+		return -1;
+	return transaction_id;
 }
 
 static size_t
 mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn callback,
-                void* user_data, int only_last_query) {
+                void* user_data, int only_transaction_id) {
 	struct sockaddr_in6 addr;
 	struct sockaddr* saddr = (struct sockaddr*)&addr;
 	socklen_t addrlen = sizeof(addr);
@@ -895,8 +911,8 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 	uint16_t authority_rrs = ntohs(*data++);
 	uint16_t additional_rrs = ntohs(*data++);
 
-	if (only_last_query && transaction_id != mdns_transaction_id)  // || (flags != 0x8400))
-		return 0;  // Not a reply to our last question
+	if ((only_transaction_id > 0) && (transaction_id != only_transaction_id))  // || (flags != 0x8400))
+		return 0;  // Not a reply to the wanted query
 
 	if (questions > 1)
 		return 0;
