@@ -1076,7 +1076,8 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		*txt_record++ = (char)txt_length;
 		memcpy(txt_record, txt, txt_length);  // txt record
 		data = MDNS_POINTER_OFFSET(txt_record, txt_length);
-		remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+		//Unused until multiple txt records are supported
+		//remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	}
 
 	size_t tosend = MDNS_POINTER_DIFF(data, buffer);
