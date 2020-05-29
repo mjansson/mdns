@@ -219,7 +219,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 						log_addr = 1;
 					}
 					if (num_sockets < max_sockets) {
-						saddr->sin_port = 0;
+						saddr->sin_port = htons(MDNS_PORT);
 						int sock = mdns_socket_open_ipv4(saddr);
 						if (sock >= 0) {
 							sockets[num_sockets++] = sock;
@@ -251,7 +251,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 						log_addr = 1;
 					}
 					if (num_sockets < max_sockets) {
-						saddr->sin6_port = 0;
+						saddr->sin6_port = htons(MDNS_PORT);
 						int sock = mdns_socket_open_ipv6(saddr);
 						if (sock >= 0) {
 							sockets[num_sockets++] = sock;
@@ -430,6 +430,7 @@ send_dns_sd(void) {
 	size_t records;
 
 	// This is a simple implementation that loops for 5 seconds or as long as we get replies
+	int res;
 	printf("Reading DNS-SD replies\n");
 	do {
 		struct timeval timeout;
@@ -446,16 +447,16 @@ send_dns_sd(void) {
 		}
 
 		records = 0;
-		if (select(nfds, &readfs, 0, 0, &timeout) >= 0) {
+		res = select(nfds, &readfs, 0, 0, &timeout);
+		if (res > 0) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
 				if (FD_ISSET(sockets[isock], &readfs)) {
 					records += mdns_discovery_recv(sockets[isock], buffer, capacity, query_callback,
 					                               user_data);
 				}
-				FD_SET(sockets[isock], &readfs);
 			}
 		}
-	} while (records);
+	} while (res > 0);
 
 	free(buffer);
 
@@ -491,6 +492,7 @@ send_mdns_query(const char* service) {
 	}
 
 	// This is a simple implementation that loops for 5 seconds or as long as we get replies
+	int res;
 	printf("Reading mDNS query replies\n");
 	do {
 		struct timeval timeout;
@@ -507,7 +509,8 @@ send_mdns_query(const char* service) {
 		}
 
 		records = 0;
-		if (select(nfds, &readfs, 0, 0, &timeout) >= 0) {
+		res = select(nfds, &readfs, 0, 0, &timeout);
+		if (res > 0) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
 				if (FD_ISSET(sockets[isock], &readfs)) {
 					records += mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
@@ -516,7 +519,7 @@ send_mdns_query(const char* service) {
 				FD_SET(sockets[isock], &readfs);
 			}
 		}
-	} while (records);
+	} while (res > 0);
 
 	free(buffer);
 

@@ -125,33 +125,21 @@ struct mdns_header_t {
 
 //! Open and setup a IPv4 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for INADDR_ANY.
-//  To send discovery requests and queries set 0 as port to assign a random user level port (also
-//  done if passing a null saddr). To run discovery service listening for incoming
-//  discoveries and queries, set MDNS_PORT as port.
 static int
 mdns_socket_open_ipv4(struct sockaddr_in* saddr);
 
 //! Setup an already opened IPv4 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for INADDR_ANY.
-//  To send discovery requests and queries set 0 as port to assign a random user level port (also
-//  done if passing a null saddr). To run discovery service listening for incoming
-//  discoveries and queries, set MDNS_PORT as port.
 static int
 mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr);
 
 //! Open and setup a IPv6 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for in6addr_any.
-//  To send discovery requests and queries set 0 as port to assign a random user level port (also
-//  done if passing a null saddr). To run discovery service listening for incoming
-//  discoveries and queries, set MDNS_PORT as port.
 static int
 mdns_socket_open_ipv6(struct sockaddr_in6* saddr);
 
 //! Setup an already opened IPv6 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for in6addr_any.
-//  To send discovery requests and queries set 0 as port to assign a random user level port (also
-//  done if passing a null saddr). To run discovery service listening for incoming
-//  discoveries and queries, set MDNS_PORT as port.
 static int
 mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr);
 
@@ -159,9 +147,8 @@ mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr);
 static void
 mdns_socket_close(int sock);
 
-//! Listen for incoming multicast DNS-SD and mDNS query requests. The socket should have been
-//  opened on port MDNS_PORT using one of the mdns open or setup socket functions. Returns the
-//  number of queries parsed.
+//! Listen for incoming multicast DNS-SD and mDNS query requests. Returns the number of queries
+//  parsed.
 static size_t
 mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback_fn callback,
                    void* user_data);
@@ -288,9 +275,13 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 		memset(saddr, 0, sizeof(struct sockaddr_in));
 		saddr->sin_family = AF_INET;
 		saddr->sin_addr.s_addr = INADDR_ANY;
+		saddr->sin_port = htons((unsigned short)MDNS_PORT);
 #ifdef __APPLE__
 		saddr->sin_len = sizeof(struct sockaddr_in);
 #endif
+	} else {
+		if (!saddr->sin_port)
+			saddr->sin_port = htons((unsigned short)MDNS_PORT);
 	}
 
 	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in)))
@@ -346,9 +337,13 @@ mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr) {
 		memset(saddr, 0, sizeof(struct sockaddr_in6));
 		saddr->sin6_family = AF_INET6;
 		saddr->sin6_addr = in6addr_any;
+		saddr->sin6_port = htons((unsigned short)MDNS_PORT);
 #ifdef __APPLE__
 		saddr->sin6_len = sizeof(struct sockaddr_in6);
 #endif
+	} else {
+		if (!saddr->sin6_port)
+			saddr->sin6_port = htons((unsigned short)MDNS_PORT);
 	}
 
 	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in6)))
@@ -690,11 +685,17 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 	uint16_t authority_rrs = ntohs(*data++);
 	uint16_t additional_rrs = ntohs(*data++);
 
-	if (transaction_id || (flags != 0x8400))
+	if (transaction_id || (flags != 0x8400)) {
+		printf("Got transaction ID %d and flags %x\n", (int)transaction_id, (int)flags);
 		return 0;  // Not a reply to our question
+	}
 
+	// It seems some implementations do not fill the correct questions field,
+	// so ignore this check for now and only validate answer string
+	/*
 	if (questions != 1)
 		return 0;
+	*/
 
 	int i;
 	for (i = 0; i < questions; ++i) {
