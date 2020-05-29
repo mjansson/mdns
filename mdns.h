@@ -465,7 +465,9 @@ mdns_string_extract(const void* buffer, size_t size, size_t* offset, char* str, 
 	size_t cur = *offset;
 	size_t end = MDNS_INVALID_POS;
 	mdns_string_pair_t substr;
-	mdns_string_t result = {str, 0};
+	mdns_string_t result;
+	result.str = str;
+	result.length = 0;
 	char* dst = str;
 	size_t remain = capacity;
 	do {
@@ -685,10 +687,8 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 	uint16_t authority_rrs = ntohs(*data++);
 	uint16_t additional_rrs = ntohs(*data++);
 
-	if (transaction_id || (flags != 0x8400)) {
-		printf("Got transaction ID %d and flags %x\n", (int)transaction_id, (int)flags);
+	if (transaction_id || (flags != 0x8400))
 		return 0;  // Not a reply to our question
-	}
 
 	// It seems some implementations do not fill the correct questions field,
 	// so ignore this check for now and only validate answer string
@@ -963,7 +963,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	header->transaction_id = htons(transaction_id);
 	header->flags = htons(0x8400);
 	header->questions = htons(1);
-	header->answer_rrs = htons(2 + use_ipv4 + use_ipv6 + use_txt);
+	header->answer_rrs = htons((unsigned short)(2 + use_ipv4 + use_ipv6 + use_txt));
 	header->authority_rrs = 0;
 	header->additional_rrs = 0;
 

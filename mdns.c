@@ -37,7 +37,7 @@ ipv4_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in* 
                        size_t addrlen) {
 	char host[NI_MAXHOST] = {0};
 	char service[NI_MAXSERV] = {0};
-	int ret = getnameinfo((const struct sockaddr*)addr, addrlen, host, NI_MAXHOST, service,
+	int ret = getnameinfo((const struct sockaddr*)addr, (socklen_t)addrlen, host, NI_MAXHOST, service,
 	                      NI_MAXSERV, NI_NUMERICSERV | NI_NUMERICHOST);
 	int len = 0;
 	if (ret == 0) {
@@ -48,7 +48,9 @@ ipv4_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in* 
 	}
 	if (len >= (int)capacity)
 		len = (int)capacity - 1;
-	mdns_string_t str = {buffer, len};
+	mdns_string_t str;
+	str.str = buffer;
+	str.length = len;
 	return str;
 }
 
@@ -57,7 +59,7 @@ ipv6_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in6*
                        size_t addrlen) {
 	char host[NI_MAXHOST] = {0};
 	char service[NI_MAXSERV] = {0};
-	int ret = getnameinfo((const struct sockaddr*)addr, addrlen, host, NI_MAXHOST, service,
+	int ret = getnameinfo((const struct sockaddr*)addr, (socklen_t)addrlen, host, NI_MAXHOST, service,
 	                      NI_MAXSERV, NI_NUMERICSERV | NI_NUMERICHOST);
 	int len = 0;
 	if (ret == 0) {
@@ -68,7 +70,9 @@ ipv6_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in6*
 	}
 	if (len >= (int)capacity)
 		len = (int)capacity - 1;
-	mdns_string_t str = {buffer, len};
+	mdns_string_t str;
+	str.str = buffer;
+	str.length = len;
 	return str;
 }
 
@@ -175,7 +179,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 #ifdef _WIN32
 
 	IP_ADAPTER_ADDRESSES* adapter_address = 0;
-	unsigned int address_size = 8000;
+	ULONG address_size = 8000;
 	unsigned int ret;
 	unsigned int num_retries = 4;
 	do {
@@ -546,8 +550,12 @@ service_mdns(const char* hostname, const char* service, int service_port) {
 	size_t capacity = 2048;
 	void* buffer = malloc(capacity);
 
-	service_record_t service_record = {service, hostname, service_address_ipv4,
-	                                   service_address_ipv6, service_port};
+	service_record_t service_record;
+	service_record.service = service;
+	service_record.hostname = hostname;
+	service_record.address_ipv4 = service_address_ipv4;
+	service_record.address_ipv6 = service_address_ipv6;
+	service_record.port = service_port;
 
 	// This is a crude implementation that checks for incoming queries
 	while (1) {
