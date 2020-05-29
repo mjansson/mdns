@@ -18,15 +18,11 @@ The `mdns.c` test executable file demostrates the use of all features, including
 
 ### Sockets
 
-Socket for mDNS communication can either be opened by the library by using `mdns_socket_open_ipv4` or `mdns_socket_open_ipv6`, or by initializing an existing socket with `mdns_socket_setup_ipv4` or `mdns_socket_setup_ipv6`.
+Socket for mDNS communication can either be opened by the library by using `mdns_socket_open_ipv4` or `mdns_socket_open_ipv6`, or by initializing an existing socket with `mdns_socket_setup_ipv4` or `mdns_socket_setup_ipv6`. The socket open/setup functions will bind the socket to local UDP port 5353 as required by the RFCs. The socket is also initialized with multicast membership (including loopback) and set to non-blocking mode.
 
 To do discovery on the default network interface, you can pass 0 as socket address in the socket create/setup functions. This will bind the socket to the default network interface. Otherwise you should enumerate the available interfaces and pass the appropriate socket address to the create/setup function. See the example program in `mdns.c` for an example implemention of doing this for both IPv4 and IPv6.
 
-If you want to do only discovery and send queries you can pass in 0 as port in the socket address in the socket create/setup functions. This will bind the socket to a random free port in user range. This is also the default when passing a null socket address.
-
-If you want to do mDNS service response to incoming queries, you need to pass in MDNS_PORT to the socket create/setup functions to allow the socket to receive incoming query packets. This also requires a valid socket address to be passed in. However, since sockets by default receive data from all available network interfaces, you do not need to enumerate interfaces to do service response on all interfaces. See the example program in `mdns.c` for an example of setting up a service socket for both IPv4 and IPv6.
-
-The socket is initialized with multicast membership (including loopback) and set to non-blocking mode.
+If you want to do mDNS service response to incoming queries, you do not need to enumerate interfaces to do service response on all interfaces as sockets recieve data from all interfaces. See the example program in `mdns.c` for an example of setting up a service socket for both IPv4 and IPv6.
 
 Call `mdns_socket_close` to close a socket opened with `mdns_socket_open_ipv4` or `mdns_socket_open_ipv6`.
 
@@ -44,7 +40,7 @@ To read query responses use `mdns_query_recv`. All records received since last c
 
 ### Service
 
-To listen for incoming DNS-SD requests and mDNS queries the socket should be opened on port `5353` (defined in header as `MDNS_PORT`) in the call to the socket open/setup functions. Then call `mdns_socket_listen` either on notification of incoming data, or by setting blocking mode and calling `mdns_socket_listen` to block until data is available and parsed.
+To listen for incoming DNS-SD requests and mDNS queries the socket can be opened/setup on the default interface by passing 0 as socket address in the call to the socket open/setup functions (the socket will recieve data from all network interfaces). Then call `mdns_socket_listen` either on notification of incoming data, or by setting blocking mode and calling `mdns_socket_listen` to block until data is available and parsed.
 
 The entry type passed to the callback will be `MDNS_ENTRYTYPE_QUESTION` and record type `MDNS_RECORDTYPE_PTR`. Use the `mdns_record_parse_ptr` function to get the name string of the service record that was asked for.
 
