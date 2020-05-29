@@ -275,14 +275,11 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 		memset(saddr, 0, sizeof(struct sockaddr_in));
 		saddr->sin_family = AF_INET;
 		saddr->sin_addr.s_addr = INADDR_ANY;
-		saddr->sin_port = htons((unsigned short)MDNS_PORT);
 #ifdef __APPLE__
 		saddr->sin_len = sizeof(struct sockaddr_in);
 #endif
-	} else {
-		if (!saddr->sin_port)
-			saddr->sin_port = htons((unsigned short)MDNS_PORT);
 	}
+	saddr->sin_port = htons((unsigned short)MDNS_PORT);
 
 	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in)))
 		return -1;
@@ -337,14 +334,11 @@ mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr) {
 		memset(saddr, 0, sizeof(struct sockaddr_in6));
 		saddr->sin6_family = AF_INET6;
 		saddr->sin6_addr = in6addr_any;
-		saddr->sin6_port = htons((unsigned short)MDNS_PORT);
 #ifdef __APPLE__
 		saddr->sin6_len = sizeof(struct sockaddr_in6);
 #endif
-	} else {
-		if (!saddr->sin6_port)
-			saddr->sin6_port = htons((unsigned short)MDNS_PORT);
 	}
+	saddr->sin6_port = htons((unsigned short)MDNS_PORT);
 
 	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in6)))
 		return -1;
