@@ -37,8 +37,8 @@ ipv4_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in* 
                        size_t addrlen) {
 	char host[NI_MAXHOST] = {0};
 	char service[NI_MAXSERV] = {0};
-	int ret = getnameinfo((const struct sockaddr*)addr, (socklen_t)addrlen, host, NI_MAXHOST, service,
-	                      NI_MAXSERV, NI_NUMERICSERV | NI_NUMERICHOST);
+	int ret = getnameinfo((const struct sockaddr*)addr, (socklen_t)addrlen, host, NI_MAXHOST,
+	                      service, NI_MAXSERV, NI_NUMERICSERV | NI_NUMERICHOST);
 	int len = 0;
 	if (ret == 0) {
 		if (addr->sin_port != 0)
@@ -59,8 +59,8 @@ ipv6_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in6*
                        size_t addrlen) {
 	char host[NI_MAXHOST] = {0};
 	char service[NI_MAXSERV] = {0};
-	int ret = getnameinfo((const struct sockaddr*)addr, (socklen_t)addrlen, host, NI_MAXHOST, service,
-	                      NI_MAXSERV, NI_NUMERICSERV | NI_NUMERICHOST);
+	int ret = getnameinfo((const struct sockaddr*)addr, (socklen_t)addrlen, host, NI_MAXHOST,
+	                      service, NI_MAXSERV, NI_NUMERICSERV | NI_NUMERICHOST);
 	int len = 0;
 	if (ret == 0) {
 		if (addr->sin6_port != 0)
@@ -223,7 +223,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 						log_addr = 1;
 					}
 					if (num_sockets < max_sockets) {
-						saddr->sin_port = htons(MDNS_PORT);
+						saddr->sin_port = 0;
 						int sock = mdns_socket_open_ipv4(saddr);
 						if (sock >= 0) {
 							sockets[num_sockets++] = sock;
@@ -234,8 +234,8 @@ open_client_sockets(int* sockets, int max_sockets) {
 					}
 					if (log_addr) {
 						char buffer[128];
-						mdns_string_t addr = ipv4_address_to_string(
-						    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in));
+						mdns_string_t addr = ipv4_address_to_string(buffer, sizeof(buffer), saddr,
+						                                            sizeof(struct sockaddr_in));
 						printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 					}
 				}
@@ -255,7 +255,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 						log_addr = 1;
 					}
 					if (num_sockets < max_sockets) {
-						saddr->sin6_port = htons(MDNS_PORT);
+						saddr->sin6_port = 0;
 						int sock = mdns_socket_open_ipv6(saddr);
 						if (sock >= 0) {
 							sockets[num_sockets++] = sock;
@@ -266,8 +266,8 @@ open_client_sockets(int* sockets, int max_sockets) {
 					}
 					if (log_addr) {
 						char buffer[128];
-						mdns_string_t addr = ipv6_address_to_string(
-						    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in6));
+						mdns_string_t addr = ipv6_address_to_string(buffer, sizeof(buffer), saddr,
+						                                            sizeof(struct sockaddr_in6));
 						printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 					}
 				}
@@ -312,8 +312,8 @@ open_client_sockets(int* sockets, int max_sockets) {
 				}
 				if (log_addr) {
 					char buffer[128];
-					mdns_string_t addr = ipv4_address_to_string(
-					    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in));
+					mdns_string_t addr = ipv4_address_to_string(buffer, sizeof(buffer), saddr,
+					                                            sizeof(struct sockaddr_in));
 					printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 				}
 			}
@@ -343,8 +343,8 @@ open_client_sockets(int* sockets, int max_sockets) {
 				}
 				if (log_addr) {
 					char buffer[128];
-					mdns_string_t addr = ipv6_address_to_string(
-					    buffer, sizeof(buffer), saddr, sizeof(struct sockaddr_in6));
+					mdns_string_t addr = ipv6_address_to_string(buffer, sizeof(buffer), saddr,
+					                                            sizeof(struct sockaddr_in6));
 					printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 				}
 			}
@@ -489,8 +489,8 @@ send_mdns_query(const char* service) {
 
 	printf("Sending mDNS query: %s\n", service);
 	for (int isock = 0; isock < num_sockets; ++isock) {
-		transaction_id[isock] = mdns_query_send(sockets[isock], MDNS_RECORDTYPE_PTR, service, strlen(service),
-		                                        buffer, capacity);
+		transaction_id[isock] = mdns_query_send(sockets[isock], MDNS_RECORDTYPE_PTR, service,
+		                                        strlen(service), buffer, capacity);
 		if (transaction_id[isock] <= 0)
 			printf("Failed to send mDNS query: %s\n", strerror(errno));
 	}
@@ -571,7 +571,8 @@ service_mdns(const char* hostname, const char* service, int service_port) {
 		if (select(nfds, &readfs, 0, 0, 0) >= 0) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
 				if (FD_ISSET(sockets[isock], &readfs)) {
-					mdns_socket_listen(sockets[isock], buffer, capacity, service_callback, &service_record);
+					mdns_socket_listen(sockets[isock], buffer, capacity, service_callback,
+					                   &service_record);
 				}
 				FD_SET(sockets[isock], &readfs);
 			}

@@ -125,21 +125,33 @@ struct mdns_header_t {
 
 //! Open and setup a IPv4 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for INADDR_ANY.
+//  To send one-shot discovery requests and queries pass a null pointer or set 0 as port to assign
+//  a random user level ephemeral port. To run discovery service listening for incoming
+//  discoveries and queries, you must set MDNS_PORT as port.
 static int
 mdns_socket_open_ipv4(struct sockaddr_in* saddr);
 
 //! Setup an already opened IPv4 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for INADDR_ANY.
+//  To send one-shot discovery requests and queries pass a null pointer or set 0 as port to assign
+//  a random user level ephemeral port. To run discovery service listening for incoming
+//  discoveries and queries, you must set MDNS_PORT as port.
 static int
 mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr);
 
 //! Open and setup a IPv6 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for in6addr_any.
+//  To send one-shot discovery requests and queries pass a null pointer or set 0 as port to assign
+//  a random user level ephemeral port. To run discovery service listening for incoming
+//  discoveries and queries, you must set MDNS_PORT as port.
 static int
 mdns_socket_open_ipv6(struct sockaddr_in6* saddr);
 
 //! Setup an already opened IPv6 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //  pass in the appropriate socket address in saddr, otherwise pass a null pointer for in6addr_any.
+//  To send one-shot discovery requests and queries pass a null pointer or set 0 as port to assign
+//  a random user level ephemeral port. To run discovery service listening for incoming
+//  discoveries and queries, you must set MDNS_PORT as port.
 static int
 mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr);
 
@@ -147,8 +159,9 @@ mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr);
 static void
 mdns_socket_close(int sock);
 
-//! Listen for incoming multicast DNS-SD and mDNS query requests. Returns the number of queries
-//  parsed.
+//! Listen for incoming multicast DNS-SD and mDNS query requests. The socket should have been
+//  opened on port MDNS_PORT using one of the mdns open or setup socket functions. Returns the
+//  number of queries  parsed.
 static size_t
 mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback_fn callback,
                    void* user_data);
@@ -171,8 +184,8 @@ mdns_discovery_answer(int sock, const void* address, size_t address_size, void* 
                       size_t capacity, const char* record, size_t length);
 
 //! Send a multicast mDNS query on the given socket for the given service name. The supplied buffer
-//  will be used to build the query packet. Returns the transaction ID for the query sent (always >0),
-//  or <0 if error.
+//  will be used to build the query packet. Returns the transaction ID for the query sent (always
+//  >0), or <0 if error.
 static int
 mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t length, void* buffer,
                 size_t capacity);
@@ -279,7 +292,6 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 		saddr->sin_len = sizeof(struct sockaddr_in);
 #endif
 	}
-	saddr->sin_port = htons((unsigned short)MDNS_PORT);
 
 	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in)))
 		return -1;
@@ -338,7 +350,6 @@ mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr) {
 		saddr->sin6_len = sizeof(struct sockaddr_in6);
 #endif
 	}
-	saddr->sin6_port = htons((unsigned short)MDNS_PORT);
 
 	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in6)))
 		return -1;
@@ -688,7 +699,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 	// so ignore this check for now and only validate answer string
 	/*
 	if (questions != 1)
-		return 0;
+	    return 0;
 	*/
 
 	int i;
@@ -909,8 +920,8 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 	uint16_t authority_rrs = ntohs(*data++);
 	uint16_t additional_rrs = ntohs(*data++);
 
-	if ((only_transaction_id > 0) && (transaction_id != only_transaction_id))  // || (flags != 0x8400))
-		return 0;  // Not a reply to the wanted query
+	if ((only_transaction_id > 0) && (transaction_id != only_transaction_id))
+		return 0;  // Not a reply to the wanted one-shot query
 
 	if (questions > 1)
 		return 0;
@@ -1071,8 +1082,8 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		*txt_record++ = (char)txt_length;
 		memcpy(txt_record, txt, txt_length);  // txt record
 		data = MDNS_POINTER_OFFSET(txt_record, txt_length);
-		//Unused until multiple txt records are supported
-		//remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+		// Unused until multiple txt records are supported
+		// remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	}
 
 	size_t tosend = MDNS_POINTER_DIFF(data, buffer);
