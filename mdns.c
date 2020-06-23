@@ -474,7 +474,7 @@ send_dns_sd(void) {
 static int
 send_mdns_query(const char* service) {
 	int sockets[32];
-	int transaction_id[32];
+	int query_id[32];
 	int num_sockets = open_client_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]));
 	if (num_sockets <= 0) {
 		printf("Failed to open any client sockets\n");
@@ -489,9 +489,9 @@ send_mdns_query(const char* service) {
 
 	printf("Sending mDNS query: %s\n", service);
 	for (int isock = 0; isock < num_sockets; ++isock) {
-		transaction_id[isock] = mdns_query_send(sockets[isock], MDNS_RECORDTYPE_PTR, service,
-		                                        strlen(service), buffer, capacity);
-		if (transaction_id[isock] <= 0)
+		query_id[isock] = mdns_query_send(sockets[isock], MDNS_RECORDTYPE_PTR, service,
+		                                  strlen(service), buffer, capacity, 0);
+		if (query_id[isock] < 0)
 			printf("Failed to send mDNS query: %s\n", strerror(errno));
 	}
 
@@ -518,7 +518,7 @@ send_mdns_query(const char* service) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
 				if (FD_ISSET(sockets[isock], &readfs)) {
 					records += mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
-					                           user_data, transaction_id[isock]);
+					                           user_data, query_id[isock]);
 				}
 				FD_SET(sockets[isock], &readfs);
 			}
@@ -593,7 +593,7 @@ service_mdns(const char* hostname, const char* service, int service_port) {
 int
 main(int argc, const char* const* argv) {
 	int mode = 0;
-	const char* service = "_test_mdns._tcp.local.";
+	const char* service = "_test-mdns._tcp.local.";
 	const char* hostname = "dummy-host";
 	int service_port = 42424;
 
