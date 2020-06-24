@@ -44,6 +44,7 @@ extern "C" {
 #define MDNS_POINTER_DIFF(a, b) ((size_t)((const char*)(a) - (const char*)(b)))
 
 #define MDNS_PORT 5353
+#define MDNS_UNICAST_RESPONSE 0x8000U
 
 enum mdns_record_type {
 	MDNS_RECORDTYPE_IGNORE = 0,
@@ -198,8 +199,11 @@ static size_t
 mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn callback,
                 void* user_data, int query_id);
 
-//! Send a unicast mDNS query answer with a single record to the given address. Returns 0 if
-//  success, or <0 if error.
+//! Send a unicast or multicast mDNS query answer with a single record to the given address. The
+//  answer will be sent multicast if address size is 0, otherwise it will be sent unicast to the
+//  given address. Use the top bit of the query class field (MDNS_UNICAST_RESPONSE) to determine
+//  if the answer should be sent unicast (bit set) or multicast (bit not set).
+//  Returns 0 if success, or <0 if error.
 static int
 mdns_query_answer(int sock, const void* address, size_t address_size, void* buffer, size_t capacity,
                   uint16_t query_id, const char* service, size_t service_length,
@@ -584,6 +588,9 @@ mdns_records_parse(int sock, const struct sockaddr* from, size_t addrlen, const 
 		data += 2;
 		uint16_t length = ntohs(*data++);
 
+		printf("Record type: 0x%02x  Record class: 0x%02x  TTL: %u  Length: %u\n", rtype, rclass,
+		       ttl, length);
+
 		*offset += 10;
 
 		if (do_callback) {
@@ -807,6 +814,8 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 		uint16_t rtype = ntohs(*data++);
 		uint16_t rclass = ntohs(*data++);
 
+		printf("Question flags: 0x%04x  rclass: 0x%04x\n", flags, rclass);
+
 		// Make sure we get a PTR question of class IN
 		if ((rtype != MDNS_RECORDTYPE_PTR) || ((rclass & 0x7FFF) != MDNS_CLASS_IN))
 			return 0;
@@ -832,7 +841,7 @@ mdns_discovery_answer(int sock, const void* address, size_t address_size, void* 
 	memcpy(data, mdns_services_query, sizeof(mdns_services_query));
 	// Flags
 	uint16_t* flags = data + 1;
-	*flags = htons(0x8400);
+	*flags = htons(0x8400U);
 	// One answer
 	uint16_t* answers = data + 3;
 	*answers = htons(1);
@@ -840,7 +849,7 @@ mdns_discovery_answer(int sock, const void* address, size_t address_size, void* 
 	// Fill in answer PTR record
 	data = (uint16_t*)((char*)buffer + sizeof(mdns_services_query));
 	// Reference _services._dns-sd._udp.local. string in question
-	*data++ = htons(0xC000 | 12);
+	*data++ = htons(0xC000U | 12U);
 	// Type
 	*data++ = htons(MDNS_RECORDTYPE_PTR);
 	// Rclass
@@ -877,6 +886,7 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	*data++ = 0;
 	*data++ = 0;
 	*data++ = 0;
+	// Fill in question
 	// Name string
 	data = (uint16_t*)mdns_string_make(data, capacity - 17, name, length);
 	if (!data)
@@ -884,7 +894,8 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	// Record type
 	*data++ = htons(type);
 	//! Unicast response, class IN
-	*data++ = htons(0x8000U | MDNS_CLASS_IN);
+	//*data++ = htons(MDNS_UNICAST_RESPONSE | MDNS_CLASS_IN);
+	*data++ = htons(MDNS_CLASS_IN);
 
 	ptrdiff_t tosend = (char*)data - (char*)buffer;
 	if (mdns_multicast_send(sock, buffer, (size_t)tosend))
@@ -910,11 +921,21 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 	uint16_t* data = (uint16_t*)buffer;
 
 	uint16_t query_id = ntohs(*data++);
-	++data;  // uint16_t flags = ntohs(*data++);
+	uint16_t flags = ntohs(*data++);
 	uint16_t questions = ntohs(*data++);
 	uint16_t answer_rrs = ntohs(*data++);
 	uint16_t authority_rrs = ntohs(*data++);
 	uint16_t additional_rrs = ntohs(*data++);
+
+	printf("Header:\n");
+	ptrdiff_t bytecount = (char*)data - (char*)buffer;
+	for (int i = 0; i < (int)bytecount; ++i) {
+		printf("%02x ", (unsigned int)((uint8_t*)buffer)[i]);
+		if ((i % 8) == 7)
+			printf("\n");
+	}
+	if (bytecount % 8)
+		printf("\n");
 
 	if ((only_query_id > 0) && (query_id != only_query_id))
 		return 0;  // Not a reply to the wanted one-shot query
@@ -929,8 +950,9 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 		if (!mdns_string_skip(buffer, data_size, &ofs))
 			return 0;
 		data = (uint16_t*)((char*)buffer + ofs);
-		++data;
-		++data;
+		uint16_t rtype = ntohs(*data++);
+		uint16_t rclass = ntohs(*data++);
+		printf("Record type: 0x%02x  Record class: 0x%02x\n", rtype, rclass);
 	}
 
 	size_t records = 0;
@@ -954,45 +976,63 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	if (capacity < (sizeof(struct mdns_header_t) + 32 + service_length + hostname_length))
 		return -1;
 
+	int use_question = (address_size ? 1 : 0);
 	int use_ipv4 = (ipv4 != 0);
 	int use_ipv6 = (ipv6 != 0);
 	int use_txt = (txt && txt_length && (txt_length <= 255));
 
+	uint16_t answer_rclass = (use_question ? MDNS_UNICAST_RESPONSE : 0) | MDNS_CLASS_IN;
+	uint16_t unicast_rclass = MDNS_UNICAST_RESPONSE | MDNS_CLASS_IN;
+	uint32_t ttl = 4500;
+	uint32_t a_ttl = 120;
+
 	// Basic answer structure
 	struct mdns_header_t* header = (struct mdns_header_t*)buffer;
-	header->query_id = htons(query_id);
+	header->query_id = (address_size ? htons(query_id) : 0);
 	header->flags = htons(0x8400);
-	header->questions = htons(1);
-	header->answer_rrs = htons((unsigned short)(2 + use_ipv4 + use_ipv6 + use_txt));
+	header->questions = htons(use_question);
+	header->answer_rrs = htons(1);
 	header->authority_rrs = 0;
-	header->additional_rrs = 0;
+	header->additional_rrs = htons((unsigned short)(1 + use_ipv4 + use_ipv6 + use_txt));
+
+	void* data = MDNS_POINTER_OFFSET(buffer, sizeof(struct mdns_header_t));
+	uint16_t* udata;
+	size_t remain, service_offset, local_offset;
 
 	// Fill in question
-	void* data = MDNS_POINTER_OFFSET(buffer, sizeof(struct mdns_header_t));
-	size_t service_offset = MDNS_POINTER_DIFF(data, buffer);
-	size_t remain = capacity - service_offset;
-	data = mdns_string_make(data, remain, service, service_length);
-	size_t local_offset = MDNS_POINTER_DIFF(data, buffer) - 7;
-	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
-	if (!data || (remain <= 4))
-		return -1;
+	if (use_question) {
+		service_offset = MDNS_POINTER_DIFF(data, buffer);
+		remain = capacity - service_offset;
+		data = mdns_string_make(data, remain, service, service_length);
+		local_offset = MDNS_POINTER_DIFF(data, buffer) - 7;
+		remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+		if (!data || (remain <= 4))
+			return -1;
 
-	uint16_t* udata = (uint16_t*)data;
-	*udata++ = htons(MDNS_RECORDTYPE_PTR);
-	*udata++ = htons(MDNS_CLASS_IN);
-	data = udata;
+		udata = (uint16_t*)data;
+		*udata++ = htons(MDNS_RECORDTYPE_PTR);
+		*udata++ = htons(unicast_rclass);
+		data = udata;
+	}
 	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 
 	// Fill in answers
 	// PTR record for service
-	data = mdns_string_make_ref(data, remain, service_offset);
+	if (use_question) {
+		data = mdns_string_make_ref(data, remain, service_offset);
+	} else {
+		service_offset = MDNS_POINTER_DIFF(data, buffer);
+		remain = capacity - service_offset;
+		data = mdns_string_make(data, remain, service, service_length);
+		local_offset = MDNS_POINTER_DIFF(data, buffer) - 7;
+	}
 	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	if (!data || (remain <= 10))
 		return -1;
 	udata = (uint16_t*)data;
-	*udata++ = htons(MDNS_RECORDTYPE_PTR);  // type
-	*udata++ = htons(MDNS_CLASS_IN);        // rclass
-	*(uint32_t*)udata = htonl(10);          // ttl
+	*udata++ = htons(MDNS_RECORDTYPE_PTR);
+	*udata++ = htons(answer_rclass);
+	*(uint32_t*)udata = htonl(ttl);
 	udata += 2;
 	uint16_t* record_length = udata++;  // length
 	data = udata;
@@ -1003,15 +1043,16 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		return -1;
 	*record_length = htons((uint16_t)MDNS_POINTER_DIFF(data, record_length + 1));
 
+	// Fill in additional records
 	// SRV record
 	data = mdns_string_make_ref(data, remain, service_offset);
 	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	if (!data || (remain <= 10))
 		return -1;
 	udata = (uint16_t*)data;
-	*udata++ = htons(MDNS_RECORDTYPE_SRV);  // type
-	*udata++ = htons(MDNS_CLASS_IN);        // rclass
-	*(uint32_t*)udata = htonl(10);          // ttl
+	*udata++ = htons(MDNS_RECORDTYPE_SRV);
+	*udata++ = htons(unicast_rclass);
+	*(uint32_t*)udata = htonl(ttl);
 	udata += 2;
 	record_length = udata++;  // length
 	*udata++ = htons(0);      // priority
@@ -1033,9 +1074,9 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		if (!data || (remain <= 14))
 			return -1;
 		udata = (uint16_t*)data;
-		*udata++ = htons(MDNS_RECORDTYPE_A);  // type
-		*udata++ = htons(MDNS_CLASS_IN);      // rclass
-		*(uint32_t*)udata = htonl(10);        // ttl
+		*udata++ = htons(MDNS_RECORDTYPE_A);
+		*udata++ = htons(unicast_rclass);
+		*(uint32_t*)udata = htonl(a_ttl);
 		udata += 2;
 		*udata++ = htons(4);       // length
 		*(uint32_t*)udata = ipv4;  // ipv4 address
@@ -1051,9 +1092,9 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		if (!data || (remain <= 26))
 			return -1;
 		udata = (uint16_t*)data;
-		*udata++ = htons(MDNS_RECORDTYPE_AAAA);  // type
-		*udata++ = htons(MDNS_CLASS_IN);         // rclass
-		*(uint32_t*)udata = htonl(10);           // ttl
+		*udata++ = htons(MDNS_RECORDTYPE_AAAA);
+		*udata++ = htons(unicast_rclass);
+		*(uint32_t*)udata = htonl(a_ttl);
 		udata += 2;
 		*udata++ = htons(16);     // length
 		memcpy(udata, ipv6, 16);  // ipv6 address
@@ -1068,9 +1109,9 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		if (!data || (remain <= (11 + txt_length)))
 			return -1;
 		udata = (uint16_t*)data;
-		*udata++ = htons(MDNS_RECORDTYPE_TXT);  // type
-		*udata++ = htons(MDNS_CLASS_IN);        // rclass
-		*(uint32_t*)udata = htonl(10);          // ttl
+		*udata++ = htons(MDNS_RECORDTYPE_TXT);
+		*udata++ = htons(unicast_rclass);
+		*(uint32_t*)udata = htonl(ttl);
 		udata += 2;
 		*udata++ = htons((unsigned short)(txt_length + 1));  // length
 		char* txt_record = (char*)udata;
@@ -1082,7 +1123,9 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	}
 
 	size_t tosend = MDNS_POINTER_DIFF(data, buffer);
-	return mdns_unicast_send(sock, address, address_size, buffer, tosend);
+	if (address_size)
+		return mdns_unicast_send(sock, address, address_size, buffer, tosend);
+	return mdns_multicast_send(sock, buffer, tosend);
 }
 
 static mdns_string_t

@@ -24,6 +24,9 @@ static mdns_record_txt_t txtbuffer[128];
 static uint32_t service_address_ipv4;
 static uint8_t service_address_ipv6[16];
 
+static int has_ipv4;
+static int has_ipv6;
+
 typedef struct {
 	const char* service;
 	const char* hostname;
@@ -138,8 +141,8 @@ query_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry
 
 static int
 service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry_type_t entry,
-                 uint16_t transaction_id, uint16_t rtype, uint16_t rclass, uint32_t ttl,
-                 const void* data, size_t size, size_t offset, size_t length, void* user_data) {
+                 uint16_t query_id, uint16_t rtype, uint16_t rclass, uint32_t ttl, const void* data,
+                 size_t size, size_t offset, size_t length, void* user_data) {
 	if (entry != MDNS_ENTRYTYPE_QUESTION)
 		return 0;
 	mdns_string_t fromaddrstr = ip_address_to_string(addrbuffer, sizeof(addrbuffer), from, addrlen);
@@ -159,12 +162,18 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 			                      service_record->service, service_length);
 		} else if ((service.length == service_length) &&
 		           (strncmp(service.str, service_record->service, service_length) == 0)) {
-			printf("  --> answer %s.%s port %d\n", service_record->hostname,
-			       service_record->service, service_record->port);
-			mdns_query_answer(sock, from, addrlen, sendbuffer, sizeof(sendbuffer), transaction_id,
+			uint16_t unicast = (rclass & MDNS_UNICAST_RESPONSE);
+			printf("  --> answer %s.%s port %d (%s)\n", service_record->hostname,
+			       service_record->service, service_record->port,
+			       (unicast ? "unicast" : "multicast"));
+			if (!unicast)
+				addrlen = 0;
+			char txt_record[] = "test=1";
+			mdns_query_answer(sock, from, addrlen, sendbuffer, sizeof(sendbuffer), query_id,
 			                  service_record->service, service_length, service_record->hostname,
 			                  strlen(service_record->hostname), service_record->address_ipv4,
-			                  service_record->address_ipv6, (uint16_t)service_record->port, 0, 0);
+			                  service_record->address_ipv6, (uint16_t)service_record->port,
+			                  txt_record, sizeof(txt_record));
 		}
 	}
 	return 0;
@@ -222,8 +231,10 @@ open_client_sockets(int* sockets, int max_sockets) {
 						first_ipv4 = 0;
 						log_addr = 1;
 					}
+					has_ipv4 = 1;
 					if (num_sockets < max_sockets) {
-						saddr->sin_port = 0;
+						// saddr->sin_port = 0;
+						saddr->sin_port = htons(MDNS_PORT);
 						int sock = mdns_socket_open_ipv4(saddr);
 						if (sock >= 0) {
 							sockets[num_sockets++] = sock;
@@ -239,39 +250,40 @@ open_client_sockets(int* sockets, int max_sockets) {
 						printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 					}
 				}
-			} else if (unicast->Address.lpSockaddr->sa_family == AF_INET6) {
-				struct sockaddr_in6* saddr = (struct sockaddr_in6*)unicast->Address.lpSockaddr;
-				static const unsigned char localhost[] = {0, 0, 0, 0, 0, 0, 0, 0,
-				                                          0, 0, 0, 0, 0, 0, 0, 1};
-				static const unsigned char localhost_mapped[] = {0, 0, 0,    0,    0,    0, 0, 0,
-				                                                 0, 0, 0xff, 0xff, 0x7f, 0, 0, 1};
-				if ((unicast->DadState == NldsPreferred) &&
-				    memcmp(saddr->sin6_addr.s6_addr, localhost, 16) &&
-				    memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
-					int log_addr = 0;
-					if (first_ipv6) {
-						memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
-						first_ipv6 = 0;
-						log_addr = 1;
-					}
-					if (num_sockets < max_sockets) {
-						saddr->sin6_port = 0;
-						int sock = mdns_socket_open_ipv6(saddr);
-						if (sock >= 0) {
-							sockets[num_sockets++] = sock;
-							log_addr = 1;
-						} else {
-							log_addr = 0;
-						}
-					}
-					if (log_addr) {
-						char buffer[128];
-						mdns_string_t addr = ipv6_address_to_string(buffer, sizeof(buffer), saddr,
-						                                            sizeof(struct sockaddr_in6));
-						printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
-					}
-				}
-			}
+			} /*else if (unicast->Address.lpSockaddr->sa_family == AF_INET6) {
+			    struct sockaddr_in6* saddr = (struct sockaddr_in6*)unicast->Address.lpSockaddr;
+			    static const unsigned char localhost[] = {0, 0, 0, 0, 0, 0, 0, 0,
+			                                              0, 0, 0, 0, 0, 0, 0, 1};
+			    static const unsigned char localhost_mapped[] = {0, 0, 0,    0,    0,    0, 0, 0,
+			                                                     0, 0, 0xff, 0xff, 0x7f, 0, 0, 1};
+			    if ((unicast->DadState == NldsPreferred) &&
+			        memcmp(saddr->sin6_addr.s6_addr, localhost, 16) &&
+			        memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
+			        int log_addr = 0;
+			        if (first_ipv6) {
+			            memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
+			            first_ipv6 = 0;
+			            log_addr = 1;
+			        }
+			        has_ipv6 = 1;
+			        if (num_sockets < max_sockets) {
+			            saddr->sin6_port = 0;
+			            int sock = mdns_socket_open_ipv6(saddr);
+			            if (sock >= 0) {
+			                sockets[num_sockets++] = sock;
+			                log_addr = 1;
+			            } else {
+			                log_addr = 0;
+			            }
+			        }
+			        if (log_addr) {
+			            char buffer[128];
+			            mdns_string_t addr = ipv6_address_to_string(buffer, sizeof(buffer), saddr,
+			                                                        sizeof(struct sockaddr_in6));
+			            printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
+			        }
+			    }
+			}*/
 		}
 	}
 
@@ -553,8 +565,8 @@ service_mdns(const char* hostname, const char* service, int service_port) {
 	service_record_t service_record;
 	service_record.service = service;
 	service_record.hostname = hostname;
-	service_record.address_ipv4 = service_address_ipv4;
-	service_record.address_ipv6 = service_address_ipv6;
+	service_record.address_ipv4 = has_ipv4 ? service_address_ipv4 : 0;
+	service_record.address_ipv6 = has_ipv6 ? service_address_ipv6 : 0;
 	service_record.port = service_port;
 
 	// This is a crude implementation that checks for incoming queries
