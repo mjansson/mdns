@@ -186,7 +186,9 @@ mdns_discovery_answer(int sock, const void* address, size_t address_size, void* 
 
 //! Send a multicast mDNS query on the given socket for the given service name. The supplied buffer
 //  will be used to build the query packet. The query ID can be set to non-zero to filter responses,
-//  however the RFC states that the query ID SHOULD be set to 0 for multicast queries.
+//  however the RFC states that the query ID SHOULD be set to 0 for multicast queries. The query
+//  will request a unicast response if the socket is bound to an ephemeral port, or a multicast
+//  response if the socket is bound to mDNS port 5353.
 //  Returns the used query ID, or <0 if error.
 static int
 mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t length, void* buffer,
@@ -283,9 +285,9 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 
 	memset(&req, 0, sizeof(req));
 	req.imr_multiaddr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
-	if (saddr)
+	/*if (saddr)
 		req.imr_interface = saddr->sin_addr;
-	else
+	else*/
 		req.imr_interface.s_addr = INADDR_ANY;
 	if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&req, sizeof(req)))
 		return -1;
@@ -299,9 +301,9 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 #ifdef __APPLE__
 		saddr->sin_len = sizeof(struct sockaddr_in);
 #endif
-	} else {
+	} /*else {
 		setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&saddr->sin_addr, sizeof(saddr->sin_addr));
-	}
+	}*/
 
 	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in)))
 		return -1;
@@ -881,6 +883,18 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	if (capacity < (17 + length))
 		return -1;
 
+	uint16_t rclass = MDNS_CLASS_IN | MDNS_UNICAST_RESPONSE;
+
+	struct sockaddr_storage addr_storage;
+	struct sockaddr* saddr = (struct sockaddr*)&addr_storage;
+	socklen_t saddrlen = sizeof(addr_storage);
+	if (getsockname(sock, saddr, &saddrlen) == 0) {
+		if ((saddr->sa_family == AF_INET) && (ntohs(((struct sockaddr_in*)saddr)->sin_port) == MDNS_PORT))
+			rclass &= ~MDNS_UNICAST_RESPONSE;
+		else if ((saddr->sa_family == AF_INET6) && (ntohs(((struct sockaddr_in6*)saddr)->sin6_port) == MDNS_PORT))
+			rclass &= ~MDNS_UNICAST_RESPONSE;
+	}
+
 	uint16_t* data = (uint16_t*)buffer;
 	// Query ID
 	*data++ = htons(query_id);
@@ -899,9 +913,8 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 		return -1;
 	// Record type
 	*data++ = htons(type);
-	//! Unicast response, class IN
-	//*data++ = htons(MDNS_UNICAST_RESPONSE | MDNS_CLASS_IN);
-	*data++ = htons(MDNS_CLASS_IN);
+	//! Optional unicast response based on local port, class IN
+	*data++ = htons(rclass);
 
 	ptrdiff_t tosend = (char*)data - (char*)buffer;
 	if (mdns_multicast_send(sock, buffer, (size_t)tosend))
