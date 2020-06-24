@@ -36,13 +36,13 @@ If you want to do mDNS service response to incoming queries, you do not need to 
 
 ### Discovery
 
-To send a DNS-SD service discovery request use `mdns_discovery_send`. This will send a single multicast packet (single question record for `_services._dns-sd._udp.local.`).
+To send a DNS-SD service discovery request use `mdns_discovery_send`. This will send a single multicast packet (single PTR question record for `_services._dns-sd._udp.local.`) requesting a unicast response.
 
 To read discovery responses use `mdns_discovery_recv`. All records received since last call will be piped to the callback supplied in the function call. The entry type will be one of `MDNS_ENTRYTYPE_ANSWER`, `MDNS_ENTRYTYPE_AUTHORITY` and `MDNS_ENTRYTYPE_ADDITIONAL`.
 
 ### Query
 
-To send a one-shot mDNS query for a single record use `mdns_query_send`. This will send a single multicast packet for the given record (since question record, for example `_http._tcp.local.`). You can optionally pass in a query ID for the query for later filtering of responses (even though this is discouraged by the RFC), or pass 0 to be fully compliant. The function returns the query ID associated with this query, which if non-zero can be used to filter responses in `mdns_query_recv`.
+To send a one-shot mDNS query for a single record use `mdns_query_send`. This will send a single multicast packet for the given record (single PTR question record, for example `_http._tcp.local.`). You can optionally pass in a query ID for the query for later filtering of responses (even though this is discouraged by the RFC), or pass 0 to be fully compliant. The function returns the query ID associated with this query, which if non-zero can be used to filter responses in `mdns_query_recv`. If the socket is bound to port 5353 a multicast response is requested, otherwise a unicast response.
 
 To read query responses use `mdns_query_recv`. All records received since last call will be piped to the callback supplied in the function call. If `query_id` parameter is non-zero the function will filter out any response with a query ID that does not match the given query ID. The entry type will be one of `MDNS_ENTRYTYPE_ANSWER`, `MDNS_ENTRYTYPE_AUTHORITY` and `MDNS_ENTRYTYPE_ADDITIONAL`.
 

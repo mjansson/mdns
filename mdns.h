@@ -77,8 +77,8 @@ typedef enum mdns_class mdns_class_t;
 typedef int (*mdns_record_callback_fn)(int sock, const struct sockaddr* from, size_t addrlen,
                                        mdns_entry_type_t entry, uint16_t query_id, uint16_t rtype,
                                        uint16_t rclass, uint32_t ttl, const void* data, size_t size,
-                                       size_t name_offset, size_t name_length,
-                                       size_t record_offset, size_t record_length, void* user_data);
+                                       size_t name_offset, size_t name_length, size_t record_offset,
+                                       size_t record_length, void* user_data);
 
 typedef struct mdns_string_t mdns_string_t;
 typedef struct mdns_string_pair_t mdns_string_pair_t;
@@ -301,7 +301,8 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 		saddr->sin_len = sizeof(struct sockaddr_in);
 #endif
 	} else {
-		setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&saddr->sin_addr, sizeof(saddr->sin_addr));
+		setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&saddr->sin_addr,
+		           sizeof(saddr->sin_addr));
 #ifndef _WIN32
 		saddr->sin_addr.s_addr = INADDR_ANY;
 #endif
@@ -766,8 +767,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 			++records;
 			ofs = (size_t)((char*)data - (char*)buffer);
 			if (callback(sock, saddr, addrlen, MDNS_ENTRYTYPE_ANSWER, query_id, rtype, rclass, ttl,
-			             buffer, data_size, name_offset, name_length, ofs, length,
-			             user_data))
+			             buffer, data_size, name_offset, name_length, ofs, length, user_data))
 				do_callback = 0;
 		}
 		data = (uint16_t*)((char*)data + length);
@@ -838,7 +838,8 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 
 		if (callback)
 			callback(sock, saddr, addrlen, MDNS_ENTRYTYPE_QUESTION, query_id, rtype, rclass, 0,
-			         buffer, data_size, question_offset, length, question_offset, length, user_data);
+			         buffer, data_size, question_offset, length, question_offset, length,
+			         user_data);
 
 		++parsed;
 	}
@@ -897,9 +898,11 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	struct sockaddr* saddr = (struct sockaddr*)&addr_storage;
 	socklen_t saddrlen = sizeof(addr_storage);
 	if (getsockname(sock, saddr, &saddrlen) == 0) {
-		if ((saddr->sa_family == AF_INET) && (ntohs(((struct sockaddr_in*)saddr)->sin_port) == MDNS_PORT))
+		if ((saddr->sa_family == AF_INET) &&
+		    (ntohs(((struct sockaddr_in*)saddr)->sin_port) == MDNS_PORT))
 			rclass &= ~MDNS_UNICAST_RESPONSE;
-		else if ((saddr->sa_family == AF_INET6) && (ntohs(((struct sockaddr_in6*)saddr)->sin6_port) == MDNS_PORT))
+		else if ((saddr->sa_family == AF_INET6) &&
+		         (ntohs(((struct sockaddr_in6*)saddr)->sin6_port) == MDNS_PORT))
 			rclass &= ~MDNS_UNICAST_RESPONSE;
 	}
 
@@ -953,6 +956,7 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 	uint16_t answer_rrs = ntohs(*data++);
 	uint16_t authority_rrs = ntohs(*data++);
 	uint16_t additional_rrs = ntohs(*data++);
+	(void)sizeof(flags);
 
 	if ((only_query_id > 0) && (query_id != only_query_id))
 		return 0;  // Not a reply to the wanted one-shot query
@@ -1015,7 +1019,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 
 	void* data = MDNS_POINTER_OFFSET(buffer, sizeof(struct mdns_header_t));
 	uint16_t* udata;
-	size_t remain, service_offset, local_offset, full_offset, host_offset;
+	size_t remain, service_offset = 0, local_offset = 0, full_offset, host_offset;
 
 	// Fill in question if unicast
 	if (unicast) {

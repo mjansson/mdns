@@ -90,54 +90,63 @@ ip_address_to_string(char* buffer, size_t capacity, const struct sockaddr* addr,
 
 static int
 query_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry_type_t entry,
-               uint16_t transaction_id, uint16_t rtype, uint16_t rclass, uint32_t ttl,
-               const void* data, size_t size, size_t name_offset, size_t name_length, size_t record_offset, size_t record_length, void* user_data) {
+               uint16_t query_id, uint16_t rtype, uint16_t rclass, uint32_t ttl, const void* data,
+               size_t size, size_t name_offset, size_t name_length, size_t record_offset,
+               size_t record_length, void* user_data) {
+	(void)sizeof(sock);
+	(void)sizeof(query_id);
+	(void)sizeof(name_length);
+	(void)sizeof(user_data);
 	mdns_string_t fromaddrstr = ip_address_to_string(addrbuffer, sizeof(addrbuffer), from, addrlen);
 	const char* entrytype = (entry == MDNS_ENTRYTYPE_ANSWER) ?
 	                            "answer" :
 	                            ((entry == MDNS_ENTRYTYPE_AUTHORITY) ? "authority" : "additional");
-	mdns_string_t entrystr = mdns_string_extract(data, size, &name_offset, entrybuffer, sizeof(entrybuffer));
+	mdns_string_t entrystr =
+	    mdns_string_extract(data, size, &name_offset, entrybuffer, sizeof(entrybuffer));
 	if (rtype == MDNS_RECORDTYPE_PTR) {
-		mdns_string_t namestr =
-		    mdns_record_parse_ptr(data, size, record_offset, record_length, namebuffer, sizeof(namebuffer));
-		printf("%.*s : %s %.*s PTR %.*s rclass 0x%x ttl %u length %d\n", MDNS_STRING_FORMAT(fromaddrstr),
-		       entrytype, MDNS_STRING_FORMAT(entrystr), MDNS_STRING_FORMAT(namestr), rclass, ttl, (int)record_length);
+		mdns_string_t namestr = mdns_record_parse_ptr(data, size, record_offset, record_length,
+		                                              namebuffer, sizeof(namebuffer));
+		printf("%.*s : %s %.*s PTR %.*s rclass 0x%x ttl %u length %d\n",
+		       MDNS_STRING_FORMAT(fromaddrstr), entrytype, MDNS_STRING_FORMAT(entrystr),
+		       MDNS_STRING_FORMAT(namestr), rclass, ttl, (int)record_length);
 	} else if (rtype == MDNS_RECORDTYPE_SRV) {
-		mdns_record_srv_t srv =
-		    mdns_record_parse_srv(data, size, record_offset, record_length, namebuffer, sizeof(namebuffer));
+		mdns_record_srv_t srv = mdns_record_parse_srv(data, size, record_offset, record_length,
+		                                              namebuffer, sizeof(namebuffer));
 		printf("%.*s : %s %.*s SRV %.*s priority %d weight %d port %d\n",
-		       MDNS_STRING_FORMAT(fromaddrstr), entrytype, MDNS_STRING_FORMAT(entrystr), MDNS_STRING_FORMAT(srv.name),
-		       srv.priority, srv.weight, srv.port);
+		       MDNS_STRING_FORMAT(fromaddrstr), entrytype, MDNS_STRING_FORMAT(entrystr),
+		       MDNS_STRING_FORMAT(srv.name), srv.priority, srv.weight, srv.port);
 	} else if (rtype == MDNS_RECORDTYPE_A) {
 		struct sockaddr_in addr;
 		mdns_record_parse_a(data, size, record_offset, record_length, &addr);
 		mdns_string_t addrstr =
 		    ipv4_address_to_string(namebuffer, sizeof(namebuffer), &addr, sizeof(addr));
-		printf("%.*s : %s %.*s A %.*s\n", MDNS_STRING_FORMAT(fromaddrstr), entrytype, MDNS_STRING_FORMAT(entrystr),
-		       MDNS_STRING_FORMAT(addrstr));
+		printf("%.*s : %s %.*s A %.*s\n", MDNS_STRING_FORMAT(fromaddrstr), entrytype,
+		       MDNS_STRING_FORMAT(entrystr), MDNS_STRING_FORMAT(addrstr));
 	} else if (rtype == MDNS_RECORDTYPE_AAAA) {
 		struct sockaddr_in6 addr;
 		mdns_record_parse_aaaa(data, size, record_offset, record_length, &addr);
 		mdns_string_t addrstr =
 		    ipv6_address_to_string(namebuffer, sizeof(namebuffer), &addr, sizeof(addr));
-		printf("%.*s : %s %.*s AAAA %.*s\n", MDNS_STRING_FORMAT(fromaddrstr), entrytype, MDNS_STRING_FORMAT(entrystr),
-		       MDNS_STRING_FORMAT(addrstr));
+		printf("%.*s : %s %.*s AAAA %.*s\n", MDNS_STRING_FORMAT(fromaddrstr), entrytype,
+		       MDNS_STRING_FORMAT(entrystr), MDNS_STRING_FORMAT(addrstr));
 	} else if (rtype == MDNS_RECORDTYPE_TXT) {
 		size_t parsed = mdns_record_parse_txt(data, size, record_offset, record_length, txtbuffer,
 		                                      sizeof(txtbuffer) / sizeof(mdns_record_txt_t));
 		for (size_t itxt = 0; itxt < parsed; ++itxt) {
 			if (txtbuffer[itxt].value.length) {
-				printf("%.*s : %s %.*s TXT %.*s = %.*s\n", MDNS_STRING_FORMAT(fromaddrstr), entrytype, MDNS_STRING_FORMAT(entrystr),
+				printf("%.*s : %s %.*s TXT %.*s = %.*s\n", MDNS_STRING_FORMAT(fromaddrstr),
+				       entrytype, MDNS_STRING_FORMAT(entrystr),
 				       MDNS_STRING_FORMAT(txtbuffer[itxt].key),
 				       MDNS_STRING_FORMAT(txtbuffer[itxt].value));
 			} else {
-				printf("%.*s : %s %.*s TXT %.*s\n", MDNS_STRING_FORMAT(fromaddrstr), entrytype, MDNS_STRING_FORMAT(entrystr),
-				       MDNS_STRING_FORMAT(txtbuffer[itxt].key));
+				printf("%.*s : %s %.*s TXT %.*s\n", MDNS_STRING_FORMAT(fromaddrstr), entrytype,
+				       MDNS_STRING_FORMAT(entrystr), MDNS_STRING_FORMAT(txtbuffer[itxt].key));
 			}
 		}
 	} else {
-		printf("%.*s : %s %.*s type %u rclass 0x%x ttl %u length %d\n", MDNS_STRING_FORMAT(fromaddrstr),
-		       entrytype, MDNS_STRING_FORMAT(entrystr), rtype, rclass, ttl, (int)record_length);
+		printf("%.*s : %s %.*s type %u rclass 0x%x ttl %u length %d\n",
+		       MDNS_STRING_FORMAT(fromaddrstr), entrytype, MDNS_STRING_FORMAT(entrystr), rtype,
+		       rclass, ttl, (int)record_length);
 	}
 	return 0;
 }
@@ -145,13 +154,17 @@ query_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry
 static int
 service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry_type_t entry,
                  uint16_t query_id, uint16_t rtype, uint16_t rclass, uint32_t ttl, const void* data,
-                 size_t size, size_t name_offset, size_t name_length, size_t record_offset, size_t record_length, void* user_data) {
+                 size_t size, size_t name_offset, size_t name_length, size_t record_offset,
+                 size_t record_length, void* user_data) {
+	(void)sizeof(name_offset);
+	(void)sizeof(name_length);
+	(void)sizeof(ttl);
 	if (entry != MDNS_ENTRYTYPE_QUESTION)
 		return 0;
 	mdns_string_t fromaddrstr = ip_address_to_string(addrbuffer, sizeof(addrbuffer), from, addrlen);
 	if (rtype == MDNS_RECORDTYPE_PTR) {
-		mdns_string_t service =
-		    mdns_record_parse_ptr(data, size, record_offset, record_length, namebuffer, sizeof(namebuffer));
+		mdns_string_t service = mdns_record_parse_ptr(data, size, record_offset, record_length,
+		                                              namebuffer, sizeof(namebuffer));
 		printf("%.*s : question PTR %.*s\n", MDNS_STRING_FORMAT(fromaddrstr),
 		       MDNS_STRING_FORMAT(service));
 
@@ -179,8 +192,8 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 			                  txt_record, sizeof(txt_record));
 		}
 	} else if (rtype == MDNS_RECORDTYPE_SRV) {
-		mdns_record_srv_t service =
-		    mdns_record_parse_srv(data, size, record_offset, record_length, namebuffer, sizeof(namebuffer));
+		mdns_record_srv_t service = mdns_record_parse_srv(data, size, record_offset, record_length,
+		                                                  namebuffer, sizeof(namebuffer));
 		printf("%.*s : question SRV %.*s\n", MDNS_STRING_FORMAT(fromaddrstr),
 		       MDNS_STRING_FORMAT(service.name));
 #if 0
@@ -258,7 +271,7 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 					}
 					has_ipv4 = 1;
 					if (num_sockets < max_sockets) {
-						saddr->sin_port = htons(port);
+						saddr->sin_port = htons((unsigned short)port);
 						int sock = mdns_socket_open_ipv4(saddr);
 						if (sock >= 0) {
 							sockets[num_sockets++] = sock;
@@ -275,38 +288,38 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 					}
 				}
 			} else if (unicast->Address.lpSockaddr->sa_family == AF_INET6) {
-			    struct sockaddr_in6* saddr = (struct sockaddr_in6*)unicast->Address.lpSockaddr;
-			    static const unsigned char localhost[] = {0, 0, 0, 0, 0, 0, 0, 0,
-			                                              0, 0, 0, 0, 0, 0, 0, 1};
-			    static const unsigned char localhost_mapped[] = {0, 0, 0,    0,    0,    0, 0, 0,
-			                                                     0, 0, 0xff, 0xff, 0x7f, 0, 0, 1};
-			    if ((unicast->DadState == NldsPreferred) &&
-			        memcmp(saddr->sin6_addr.s6_addr, localhost, 16) &&
-			        memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
-			        int log_addr = 0;
-			        if (first_ipv6) {
-			            memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
-			            first_ipv6 = 0;
-			            log_addr = 1;
-			        }
-			        has_ipv6 = 1;
-			        if (num_sockets < max_sockets) {
-			            saddr->sin6_port = htons(port);
-			            int sock = mdns_socket_open_ipv6(saddr);
-			            if (sock >= 0) {
-			                sockets[num_sockets++] = sock;
-			                log_addr = 1;
-			            } else {
-			                log_addr = 0;
-			            }
-			        }
-			        if (log_addr) {
-			            char buffer[128];
-			            mdns_string_t addr = ipv6_address_to_string(buffer, sizeof(buffer), saddr,
-			                                                        sizeof(struct sockaddr_in6));
-			            printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
-			        }
-			    }
+				struct sockaddr_in6* saddr = (struct sockaddr_in6*)unicast->Address.lpSockaddr;
+				static const unsigned char localhost[] = {0, 0, 0, 0, 0, 0, 0, 0,
+				                                          0, 0, 0, 0, 0, 0, 0, 1};
+				static const unsigned char localhost_mapped[] = {0, 0, 0,    0,    0,    0, 0, 0,
+				                                                 0, 0, 0xff, 0xff, 0x7f, 0, 0, 1};
+				if ((unicast->DadState == NldsPreferred) &&
+				    memcmp(saddr->sin6_addr.s6_addr, localhost, 16) &&
+				    memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
+					int log_addr = 0;
+					if (first_ipv6) {
+						memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
+						first_ipv6 = 0;
+						log_addr = 1;
+					}
+					has_ipv6 = 1;
+					if (num_sockets < max_sockets) {
+						saddr->sin6_port = htons((unsigned short)port);
+						int sock = mdns_socket_open_ipv6(saddr);
+						if (sock >= 0) {
+							sockets[num_sockets++] = sock;
+							log_addr = 1;
+						} else {
+							log_addr = 0;
+						}
+					}
+					if (log_addr) {
+						char buffer[128];
+						mdns_string_t addr = ipv6_address_to_string(buffer, sizeof(buffer), saddr,
+						                                            sizeof(struct sockaddr_in6));
+						printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
+					}
+				}
 			}
 		}
 	}
