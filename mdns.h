@@ -282,7 +282,10 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 
 	memset(&req, 0, sizeof(req));
 	req.imr_multiaddr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
-	req.imr_interface.s_addr = INADDR_ANY;
+	if (saddr)
+		req.imr_interface = saddr->sin_addr;
+	else
+		req.imr_interface.s_addr = INADDR_ANY;
 	if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&req, sizeof(req)))
 		return -1;
 
@@ -295,6 +298,8 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 #ifdef __APPLE__
 		saddr->sin_len = sizeof(struct sockaddr_in);
 #endif
+	} else {
+		setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&saddr->sin_addr, sizeof(saddr->sin_addr));
 	}
 
 	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in)))
@@ -624,27 +629,27 @@ mdns_multicast_send(int sock, const void* buffer, size_t size) {
 	if (getsockname(sock, saddr, &saddrlen))
 		return -1;
 	if (saddr->sa_family == AF_INET6) {
-		memset(&addr6, 0, sizeof(struct sockaddr_in6));
+		memset(&addr6, 0, sizeof(saddr6));
 		addr6.sin6_family = AF_INET6;
 #ifdef __APPLE__
-		addr6.sin6_len = sizeof(struct sockaddr_in6);
+		addr6.sin6_len = sizeof(saddr6);
 #endif
 		addr6.sin6_addr.s6_addr[0] = 0xFF;
 		addr6.sin6_addr.s6_addr[1] = 0x02;
 		addr6.sin6_addr.s6_addr[15] = 0xFB;
 		addr6.sin6_port = htons((unsigned short)MDNS_PORT);
 		saddr = (struct sockaddr*)&addr6;
-		saddrlen = sizeof(struct sockaddr_in6);
+		saddrlen = sizeof(addr6);
 	} else {
-		memset(&addr, 0, sizeof(struct sockaddr_in));
+		memset(&addr, 0, sizeof(addr));
 		addr.sin_family = AF_INET;
 #ifdef __APPLE__
-		addr.sin_len = sizeof(struct sockaddr_in);
+		addr.sin_len = sizeof(addr);
 #endif
 		addr.sin_addr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
 		addr.sin_port = htons((unsigned short)MDNS_PORT);
 		saddr = (struct sockaddr*)&addr;
-		saddrlen = sizeof(struct sockaddr_in);
+		saddrlen = sizeof(addr);
 	}
 
 	if (sendto(sock, (const char*)buffer, (mdns_size_t)size, 0, saddr, saddrlen) < 0)

@@ -3,9 +3,10 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 #endif
 
+#include <stdio.h>
+
 #include "mdns.h"
 
-#include <stdio.h>
 #include <errno.h>
 
 #ifdef _WIN32
@@ -180,7 +181,7 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 }
 
 static int
-open_client_sockets(int* sockets, int max_sockets) {
+open_client_sockets(int* sockets, int max_sockets, int port) {
 	// When sending, each socket can only send to one network interface
 	// Thus we need to open one socket for each interface and address family
 	int num_sockets = 0;
@@ -233,8 +234,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 					}
 					has_ipv4 = 1;
 					if (num_sockets < max_sockets) {
-						// saddr->sin_port = 0;
-						saddr->sin_port = htons(MDNS_PORT);
+						saddr->sin_port = htons(port);
 						int sock = mdns_socket_open_ipv4(saddr);
 						if (sock >= 0) {
 							sockets[num_sockets++] = sock;
@@ -267,7 +267,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 			        }
 			        has_ipv6 = 1;
 			        if (num_sockets < max_sockets) {
-			            saddr->sin6_port = 0;
+			            saddr->sin6_port = htons(port);
 			            int sock = mdns_socket_open_ipv6(saddr);
 			            if (sock >= 0) {
 			                sockets[num_sockets++] = sock;
@@ -313,7 +313,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 					log_addr = 1;
 				}
 				if (num_sockets < max_sockets) {
-					saddr->sin_port = 0;
+					saddr->sin_port = htons(port);
 					int sock = mdns_socket_open_ipv4(saddr);
 					if (sock >= 0) {
 						sockets[num_sockets++] = sock;
@@ -329,7 +329,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 					printf("Local IPv4 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 				}
 			}
-		} else if (ifa->ifa_addr->sa_family == AF_INET6) {
+		} /*else if (ifa->ifa_addr->sa_family == AF_INET6) {
 			struct sockaddr_in6* saddr = (struct sockaddr_in6*)ifa->ifa_addr;
 			static const unsigned char localhost[] = {0, 0, 0, 0, 0, 0, 0, 0,
 			                                          0, 0, 0, 0, 0, 0, 0, 1};
@@ -344,7 +344,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 					log_addr = 1;
 				}
 				if (num_sockets < max_sockets) {
-					saddr->sin6_port = 0;
+					saddr->sin6_port = htons(port);
 					int sock = mdns_socket_open_ipv6(saddr);
 					if (sock >= 0) {
 						sockets[num_sockets++] = sock;
@@ -360,7 +360,7 @@ open_client_sockets(int* sockets, int max_sockets) {
 					printf("Local IPv6 address: %.*s\n", MDNS_STRING_FORMAT(addr));
 				}
 			}
-		}
+		}*/
 	}
 
 	freeifaddrs(ifaddr);
@@ -376,8 +376,9 @@ open_service_sockets(int* sockets, int max_sockets) {
 	// Thus we only need to open one socket for each address family
 	int num_sockets = 0;
 
-	// Call the client socket function to enumerate and get local addresses
-	open_client_sockets(0, 0);
+	// Call the client socket function to enumerate and get local addresses,
+	// but not open the actual sockets
+	open_client_sockets(0, 0, 0);
 
 	if (num_sockets < max_sockets) {
 		struct sockaddr_in sock_addr;
@@ -397,6 +398,7 @@ open_service_sockets(int* sockets, int max_sockets) {
 			sockets[num_sockets++] = sock;
 	}
 
+	/*
 	if (num_sockets < max_sockets) {
 		struct sockaddr_in6 sock_addr;
 		memset(&sock_addr, 0, sizeof(struct sockaddr_in6));
@@ -410,16 +412,7 @@ open_service_sockets(int* sockets, int max_sockets) {
 		if (sock >= 0)
 			sockets[num_sockets++] = sock;
 	}
-
-	for (int isock = 0; isock < num_sockets; ++isock) {
-#ifdef _WIN32
-		unsigned long param = 1;
-		ioctlsocket(sockets[isock], FIONBIO, &param);
-#else
-		const int flags = fcntl(sockets[isock], F_GETFL, 0);
-		fcntl(sockets[isock], F_SETFL, flags | O_NONBLOCK);
-#endif
-	}
+	*/
 
 	return num_sockets;
 }
@@ -427,7 +420,7 @@ open_service_sockets(int* sockets, int max_sockets) {
 static int
 send_dns_sd(void) {
 	int sockets[32];
-	int num_sockets = open_client_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]));
+	int num_sockets = open_client_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]), 0);
 	if (num_sockets <= 0) {
 		printf("Failed to open any client sockets\n");
 		return -1;
@@ -487,7 +480,7 @@ static int
 send_mdns_query(const char* service) {
 	int sockets[32];
 	int query_id[32];
-	int num_sockets = open_client_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]));
+	int num_sockets = open_client_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]), 0);
 	if (num_sockets <= 0) {
 		printf("Failed to open any client sockets\n");
 		return -1;
