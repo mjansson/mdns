@@ -629,7 +629,7 @@ mdns_multicast_send(int sock, const void* buffer, size_t size) {
 	if (getsockname(sock, saddr, &saddrlen))
 		return -1;
 	if (saddr->sa_family == AF_INET6) {
-		memset(&addr6, 0, sizeof(saddr6));
+		memset(&addr6, 0, sizeof(addr6));
 		addr6.sin6_family = AF_INET6;
 #ifdef __APPLE__
 		addr6.sin6_len = sizeof(saddr6);
