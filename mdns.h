@@ -45,6 +45,7 @@ extern "C" {
 
 #define MDNS_PORT 5353
 #define MDNS_UNICAST_RESPONSE 0x8000U
+#define MDNS_CACHE_FLUSH 0x8000U
 
 enum mdns_record_type {
 	MDNS_RECORDTYPE_IGNORE = 0,
@@ -981,21 +982,21 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	if (capacity < (sizeof(struct mdns_header_t) + 32 + service_length + hostname_length))
 		return -1;
 
-	int use_question = (address_size ? 1 : 0);
+	int unicast = (address_size ? 1 : 0);
 	int use_ipv4 = (ipv4 != 0);
 	int use_ipv6 = (ipv6 != 0);
 	int use_txt = (txt && txt_length && (txt_length <= 255));
 
-	uint16_t answer_rclass = (use_question ? MDNS_UNICAST_RESPONSE : 0) | MDNS_CLASS_IN;
-	uint16_t unicast_rclass = MDNS_UNICAST_RESPONSE | MDNS_CLASS_IN;
-	uint32_t ttl = 4500;
-	uint32_t a_ttl = 120;
+	uint16_t question_rclass = (unicast ? MDNS_UNICAST_RESPONSE : 0) | MDNS_CLASS_IN;
+	uint16_t rclass = (unicast ? MDNS_CACHE_FLUSH : 0) | MDNS_CLASS_IN;
+	uint32_t ttl = (unicast ? 10 : 60);
+	uint32_t a_ttl = ttl;
 
 	// Basic answer structure
 	struct mdns_header_t* header = (struct mdns_header_t*)buffer;
 	header->query_id = (address_size ? htons(query_id) : 0);
 	header->flags = htons(0x8400);
-	header->questions = htons(use_question);
+	header->questions = htons(unicast ? 1 : 0);
 	header->answer_rrs = htons(1);
 	header->authority_rrs = 0;
 	header->additional_rrs = htons((unsigned short)(1 + use_ipv4 + use_ipv6 + use_txt));
@@ -1004,8 +1005,8 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	uint16_t* udata;
 	size_t remain, service_offset, local_offset;
 
-	// Fill in question
-	if (use_question) {
+	// Fill in question if unicast
+	if (unicast) {
 		service_offset = MDNS_POINTER_DIFF(data, buffer);
 		remain = capacity - service_offset;
 		data = mdns_string_make(data, remain, service, service_length);
@@ -1016,14 +1017,14 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 
 		udata = (uint16_t*)data;
 		*udata++ = htons(MDNS_RECORDTYPE_PTR);
-		*udata++ = htons(unicast_rclass);
+		*udata++ = htons(question_rclass);
 		data = udata;
 	}
 	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 
 	// Fill in answers
 	// PTR record for service
-	if (use_question) {
+	if (unicast) {
 		data = mdns_string_make_ref(data, remain, service_offset);
 	} else {
 		service_offset = MDNS_POINTER_DIFF(data, buffer);
@@ -1036,7 +1037,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		return -1;
 	udata = (uint16_t*)data;
 	*udata++ = htons(MDNS_RECORDTYPE_PTR);
-	*udata++ = htons(answer_rclass);
+	*udata++ = htons(rclass);
 	*(uint32_t*)udata = htonl(ttl);
 	udata += 2;
 	uint16_t* record_length = udata++;  // length
@@ -1056,7 +1057,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		return -1;
 	udata = (uint16_t*)data;
 	*udata++ = htons(MDNS_RECORDTYPE_SRV);
-	*udata++ = htons(unicast_rclass);
+	*udata++ = htons(rclass);
 	*(uint32_t*)udata = htonl(ttl);
 	udata += 2;
 	record_length = udata++;  // length
@@ -1080,7 +1081,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 			return -1;
 		udata = (uint16_t*)data;
 		*udata++ = htons(MDNS_RECORDTYPE_A);
-		*udata++ = htons(unicast_rclass);
+		*udata++ = htons(rclass);
 		*(uint32_t*)udata = htonl(a_ttl);
 		udata += 2;
 		*udata++ = htons(4);       // length
@@ -1098,7 +1099,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 			return -1;
 		udata = (uint16_t*)data;
 		*udata++ = htons(MDNS_RECORDTYPE_AAAA);
-		*udata++ = htons(unicast_rclass);
+		*udata++ = htons(rclass);
 		*(uint32_t*)udata = htonl(a_ttl);
 		udata += 2;
 		*udata++ = htons(16);     // length
@@ -1115,7 +1116,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 			return -1;
 		udata = (uint16_t*)data;
 		*udata++ = htons(MDNS_RECORDTYPE_TXT);
-		*udata++ = htons(unicast_rclass);
+		*udata++ = htons(rclass);
 		*(uint32_t*)udata = htonl(ttl);
 		udata += 2;
 		*udata++ = htons((unsigned short)(txt_length + 1));  // length
