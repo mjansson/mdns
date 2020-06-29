@@ -643,7 +643,7 @@ mdns_multicast_send(int sock, const void* buffer, size_t size) {
 		memset(&addr6, 0, sizeof(addr6));
 		addr6.sin6_family = AF_INET6;
 #ifdef __APPLE__
-		addr6.sin6_len = sizeof(saddr6);
+		addr6.sin6_len = sizeof(addr6);
 #endif
 		addr6.sin6_addr.s6_addr[0] = 0xFF;
 		addr6.sin6_addr.s6_addr[1] = 0x02;
