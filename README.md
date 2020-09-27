@@ -14,7 +14,7 @@ The library does DNS-SD discovery and service as well as one-shot single record 
 
 ## Usage
 
-The `mdns.c` test executable file demostrates the use of all features, including discovery, query and service response.
+The `mdns.c` test executable file demonstrates the use of all features, including discovery, query and service response.
 
 ### Sockets
 
@@ -30,9 +30,9 @@ To open/setup the socket for service, responding to incoming queries, you need p
 
 #### Network interface
 
-To do discovery or queries on the default network interface, you can pass a null pointer as socket address in the socket create/setup functions. This will bind the socket to the default network interface. Otherwise you should enumerate the available interfaces and pass the appropriate socket address to the create/setup function. See the example program in `mdns.c` for an example implemention of doing this for both IPv4 and IPv6.
+To do discovery or queries on the default network interface, you can pass a null pointer as socket address in the socket create/setup functions. This will bind the socket to the default network interface. Otherwise you should enumerate the available interfaces and pass the appropriate socket address to the create/setup function. See the example program in `mdns.c` for an example implementation of doing this for both IPv4 and IPv6.
 
-If you want to do mDNS service response to incoming queries, you do not need to enumerate interfaces to do service response on all interfaces as sockets recieve data from all interfaces. See the example program in `mdns.c` for an example of setting up a service socket for both IPv4 and IPv6.
+If you want to do mDNS service response to incoming queries, you do not need to enumerate interfaces to do service response on all interfaces as sockets receive data from all interfaces. See the example program in `mdns.c` for an example of setting up a service socket for both IPv4 and IPv6.
 
 ### Discovery
 
@@ -48,7 +48,7 @@ To read query responses use `mdns_query_recv`. All records received since last c
 
 ### Service
 
-To listen for incoming DNS-SD requests and mDNS queries the socket can be opened/setup on the default interface by passing 0 as socket address in the call to the socket open/setup functions (the socket will recieve data from all network interfaces). Then call `mdns_socket_listen` either on notification of incoming data, or by setting blocking mode and calling `mdns_socket_listen` to block until data is available and parsed.
+To listen for incoming DNS-SD requests and mDNS queries the socket can be opened/setup on the default interface by passing 0 as socket address in the call to the socket open/setup functions (the socket will receive data from all network interfaces). Then call `mdns_socket_listen` either on notification of incoming data, or by setting blocking mode and calling `mdns_socket_listen` to block until data is available and parsed.
 
 The entry type passed to the callback will be `MDNS_ENTRYTYPE_QUESTION` and record type `MDNS_RECORDTYPE_PTR`. Use the `mdns_record_parse_ptr` function to get the name string of the service record that was asked for.
 
