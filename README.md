@@ -74,7 +74,8 @@ The `mdns.c` file contains a test executable implementation using the library to
 #### clang
 `clang -o mdns mdns.c`
 
-## Using with cmake or conan
+## Using with cmake, conan or vcpkg
 
 * use cmake with `FetchContent` or install and `find_package`
 * use conan with dependency name `mdns/20200130`, and `find_package` -> https://conan.io/center/mdns/20200130
+* use with vcpkg and cmake: `vcpkg install mdns` and `find_package`
