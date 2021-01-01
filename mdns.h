@@ -897,18 +897,16 @@ mdns_discovery_answer(int sock, const void* address, size_t address_size, void* 
 	if (capacity < (sizeof(mdns_services_query) + 32 + length))
 		return -1;
 
-	uint16_t* data = (uint16_t*)buffer;
+	void* data = buffer;
 	// Basic reply structure
 	memcpy(data, mdns_services_query, sizeof(mdns_services_query));
 	// Flags
-	uint16_t* flags = data + 1;
-	mdns_htons(flags, 0x8400U);
+	mdns_htons(MDNS_POINTER_OFFSET(data, 2), 0x8400U);
 	// One answer
-	uint16_t* answers = data + 3;
-	mdns_htons(answers, 1);
+	mdns_htons(MDNS_POINTER_OFFSET(data, 6), 1);
 
 	// Fill in answer PTR record
-	data = (uint16_t*)MDNS_POINTER_OFFSET(buffer, sizeof(mdns_services_query));
+	data = MDNS_POINTER_OFFSET(buffer, sizeof(mdns_services_query));
 	// Reference _services._dns-sd._udp.local. string in question
 	data = mdns_htons(data, 0xC000U | 12U);
 	// Type
@@ -918,7 +916,8 @@ mdns_discovery_answer(int sock, const void* address, size_t address_size, void* 
 	// TTL
 	data = mdns_htonl(data, 10);
 	// Record string length
-	uint16_t* record_length = data++;
+	void* record_length = data;
+	data = mdns_htons(data, 0);
 	uint8_t* record_data = (uint8_t*)data;
 	size_t remain = capacity - (sizeof(mdns_services_query) + 10);
 	record_data = (uint8_t*)mdns_string_make(record_data, remain, record, length);
@@ -1098,14 +1097,14 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	void* record_length = data;  // length
 	data = mdns_htons(data, 0);
 	// Make a string <hostname>.<service>.local.
-	void* record_start = data;
+	void* record_data = data;
 	full_offset = MDNS_POINTER_DIFF(data, buffer);
 	remain = capacity - full_offset;
 	data = mdns_string_make_with_ref(data, remain, hostname, hostname_length, service_offset);
 	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	if (!data || (remain <= 10))
 		return -1;
-	mdns_htons(record_length, (uint16_t)MDNS_POINTER_DIFF(data, record_start));
+	mdns_htons(record_length, (uint16_t)MDNS_POINTER_DIFF(data, record_data));
 
 	// Fill in additional records
 	// SRV record for <hostname>.<service>.local.
@@ -1118,7 +1117,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	data = mdns_htonl(data, ttl);
 	record_length = data;       
 	data = mdns_htons(data, 0); // length
-	record_start = data;
+	record_data = data;
 	data = mdns_htons(data, 0); // priority
 	data = mdns_htons(data, 0); // weight
 	data = mdns_htons(data, port); // port
@@ -1129,7 +1128,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	if (!data || (remain <= 10))
 		return -1;
-	mdns_htons(record_length, (uint16_t)MDNS_POINTER_DIFF(data, record_start));
+	mdns_htons(record_length, (uint16_t)MDNS_POINTER_DIFF(data, record_data));
 
 	// A record for <hostname>.local.
 	if (use_ipv4) {

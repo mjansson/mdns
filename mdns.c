@@ -230,7 +230,7 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 	unsigned int ret;
 	unsigned int num_retries = 4;
 	do {
-		adapter_address = malloc(address_size);
+		adapter_address = (IP_ADAPTER_ADDRESSES*)malloc(address_size);
 		ret = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_ANYCAST, 0,
 		                           adapter_address, &address_size);
 		if (ret == ERROR_BUFFER_OVERFLOW) {
