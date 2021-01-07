@@ -87,8 +87,10 @@ typedef struct mdns_record_txt_t mdns_record_txt_t;
 
 #ifdef _WIN32
 typedef int mdns_size_t;
+typedef int mdns_ssize_t;
 #else
 typedef size_t mdns_size_t;
+typedef ssize_t mdns_ssize_t;
 #endif
 
 struct mdns_string_t {
@@ -729,7 +731,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 #ifdef __APPLE__
 	saddr->sa_len = sizeof(addr);
 #endif
-	int ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
+	mdns_ssize_t ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
@@ -823,7 +825,7 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 #ifdef __APPLE__
 	saddr->sa_len = sizeof(addr);
 #endif
-	int ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
+	mdns_ssize_t ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
@@ -971,7 +973,7 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 #ifdef __APPLE__
 	saddr->sa_len = sizeof(addr);
 #endif
-	int ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
+	mdns_ssize_t ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
