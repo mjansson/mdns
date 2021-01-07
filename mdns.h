@@ -47,12 +47,6 @@ extern "C" {
 #define MDNS_UNICAST_RESPONSE 0x8000U
 #define MDNS_CACHE_FLUSH 0x8000U
 
-#if defined(__arm__) || defined(__aarch64__)
-#define MDNS_ALIGNED_LOAD_STORE 1
-#else
-#define MDNS_ALIGNED_LOAD_STORE 0
-#endif
-
 enum mdns_record_type {
 	MDNS_RECORDTYPE_IGNORE = 0,
 	// Address
@@ -268,26 +262,16 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 
 static uint16_t
 mdns_ntohs(const void* data) {
-#if MDNS_ALIGNED_LOAD_STORE
-	if ((uintptr_t)data & 1) {
-		uint16_t aligned;
-		memcpy(&aligned, data, sizeof(uint16_t));
-		return ntohs(aligned);
-	}
-#endif
-	return ntohs(*(const uint16_t*)data);
+	uint16_t aligned;
+	memcpy(&aligned, data, sizeof(uint16_t));
+	return ntohs(aligned);
 }
 
 static uint32_t
 mdns_ntohl(const void* data) {
-#if MDNS_ALIGNED_LOAD_STORE
-	if ((uintptr_t)data & 3) {
-		uint32_t aligned;
-		memcpy(&aligned, data, sizeof(uint32_t));
-		return ntohl(aligned);
-	}
-#endif
-	return ntohl(*(const uint32_t*)data);
+	uint32_t aligned;
+	memcpy(&aligned, data, sizeof(uint32_t));
+	return ntohl(aligned);
 }
 
 static void*
@@ -510,8 +494,9 @@ mdns_string_equal(const void* buffer_lhs, size_t size_lhs, size_t* ofs_lhs, cons
 			return 0;
 		if (lhs_substr.length != rhs_substr.length)
 			return 0;
-		if (strncasecmp((const char*)buffer_rhs + rhs_substr.offset,
-		                (const char*)buffer_lhs + lhs_substr.offset, rhs_substr.length))
+		if (strncasecmp((const char*)MDNS_POINTER_OFFSET_CONST(buffer_rhs, rhs_substr.offset),
+		                (const char*)MDNS_POINTER_OFFSET_CONST(buffer_lhs, lhs_substr.offset),
+		                rhs_substr.length))
 			return 0;
 		if (lhs_substr.ref && (lhs_end == MDNS_INVALID_POS))
 			lhs_end = lhs_cur + 2;
@@ -576,7 +561,7 @@ mdns_string_find(const char* str, size_t length, char c, size_t offset) {
 		return MDNS_INVALID_POS;
 	found = memchr(str + offset, c, length - offset);
 	if (found)
-		return (size_t)((const char*)found - str);
+		return (size_t)MDNS_POINTER_DIFF(found, str);
 	return MDNS_INVALID_POS;
 }
 
@@ -778,7 +763,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 		if (!mdns_string_equal(buffer, data_size, &ofs, mdns_services_query,
 		                       sizeof(mdns_services_query), &verify_ofs))
 			return 0;
-		data = (uint16_t*)MDNS_POINTER_OFFSET(buffer, ofs);
+		data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, ofs);
 
 		uint16_t rtype = mdns_ntohs(data++);
 		uint16_t rclass = mdns_ntohs(data++);
@@ -797,7 +782,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 		int is_answer = mdns_string_equal(buffer, data_size, &ofs, mdns_services_query,
 		                                  sizeof(mdns_services_query), &verify_ofs);
 		size_t name_length = ofs - name_offset;
-		data = (uint16_t*)MDNS_POINTER_OFFSET(buffer, ofs);
+		data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, ofs);
 
 		uint16_t rtype = mdns_ntohs(data++);
 		uint16_t rclass = mdns_ntohs(data++);
@@ -1115,12 +1100,12 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 	data = mdns_htons(data, MDNS_RECORDTYPE_SRV);
 	data = mdns_htons(data, rclass);
 	data = mdns_htonl(data, ttl);
-	record_length = data;       
-	data = mdns_htons(data, 0); // length
+	record_length = data;
+	data = mdns_htons(data, 0);  // length
 	record_data = data;
-	data = mdns_htons(data, 0); // priority
-	data = mdns_htons(data, 0); // weight
-	data = mdns_htons(data, port); // port
+	data = mdns_htons(data, 0);     // priority
+	data = mdns_htons(data, 0);     // weight
+	data = mdns_htons(data, port);  // port
 	// Make a string <hostname>.local.
 	host_offset = MDNS_POINTER_DIFF(data, buffer);
 	remain = capacity - host_offset;
@@ -1139,8 +1124,8 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		data = mdns_htons(data, MDNS_RECORDTYPE_A);
 		data = mdns_htons(data, rclass);
 		data = mdns_htonl(data, a_ttl);
-		data = mdns_htons(data, 4); // length
-		memcpy(data, &ipv4, 4); // ipv4 address
+		data = mdns_htons(data, 4);  // length
+		memcpy(data, &ipv4, 4);      // ipv4 address
 		data = MDNS_POINTER_OFFSET(data, 4);
 		remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	}
@@ -1154,8 +1139,8 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		data = mdns_htons(data, MDNS_RECORDTYPE_AAAA);
 		data = mdns_htons(data, rclass);
 		data = mdns_htonl(data, a_ttl);
-		data = mdns_htons(data, 16); // length
-		memcpy(data, ipv6, 16);  // ipv6 address
+		data = mdns_htons(data, 16);  // length
+		memcpy(data, ipv6, 16);       // ipv6 address
 		data = MDNS_POINTER_OFFSET(data, 16);
 		remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	}
@@ -1169,7 +1154,7 @@ mdns_query_answer(int sock, const void* address, size_t address_size, void* buff
 		data = mdns_htons(data, MDNS_RECORDTYPE_TXT);
 		data = mdns_htons(data, rclass);
 		data = mdns_htonl(data, ttl);
-		data = mdns_htons(data, (unsigned short)(txt_length + 1)); // length
+		data = mdns_htons(data, (unsigned short)(txt_length + 1));  // length
 		char* txt_record = (char*)data;
 		*txt_record++ = (char)txt_length;
 		memcpy(txt_record, txt, txt_length);  // txt record
