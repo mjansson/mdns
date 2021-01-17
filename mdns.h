@@ -46,6 +46,7 @@ extern "C" {
 #define MDNS_PORT 5353
 #define MDNS_UNICAST_RESPONSE 0x8000U
 #define MDNS_CACHE_FLUSH 0x8000U
+#define MDNS_MAX_SUBSTRINGS 64
 
 enum mdns_record_type {
 	MDNS_RECORDTYPE_IGNORE = 0,
@@ -436,6 +437,8 @@ static mdns_string_pair_t
 mdns_get_next_substring(const void* rawdata, size_t size, size_t offset) {
 	const uint8_t* buffer = (const uint8_t*)rawdata;
 	mdns_string_pair_t pair = {MDNS_INVALID_POS, 0, 0};
+	if (offset >= size)
+		return pair;
 	if (!buffer[offset]) {
 		pair.offset = offset;
 		return pair;
@@ -465,9 +468,10 @@ static int
 mdns_string_skip(const void* buffer, size_t size, size_t* offset) {
 	size_t cur = *offset;
 	mdns_string_pair_t substr;
+	unsigned int counter = 0;
 	do {
 		substr = mdns_get_next_substring(buffer, size, cur);
-		if (substr.offset == MDNS_INVALID_POS)
+		if ((substr.offset == MDNS_INVALID_POS) || (counter++ > MDNS_MAX_SUBSTRINGS))
 			return 0;
 		if (substr.ref) {
 			*offset = cur + 2;
@@ -489,10 +493,12 @@ mdns_string_equal(const void* buffer_lhs, size_t size_lhs, size_t* ofs_lhs, cons
 	size_t rhs_end = MDNS_INVALID_POS;
 	mdns_string_pair_t lhs_substr;
 	mdns_string_pair_t rhs_substr;
+	unsigned int counter = 0;
 	do {
 		lhs_substr = mdns_get_next_substring(buffer_lhs, size_lhs, lhs_cur);
 		rhs_substr = mdns_get_next_substring(buffer_rhs, size_rhs, rhs_cur);
-		if ((lhs_substr.offset == MDNS_INVALID_POS) || (rhs_substr.offset == MDNS_INVALID_POS))
+		if ((lhs_substr.offset == MDNS_INVALID_POS) || (rhs_substr.offset == MDNS_INVALID_POS) ||
+		    (counter++ > MDNS_MAX_SUBSTRINGS))
 			return 0;
 		if (lhs_substr.length != rhs_substr.length)
 			return 0;
@@ -528,10 +534,11 @@ mdns_string_extract(const void* buffer, size_t size, size_t* offset, char* str, 
 	result.str = str;
 	result.length = 0;
 	char* dst = str;
+	unsigned int counter = 0;
 	size_t remain = capacity;
 	do {
 		substr = mdns_get_next_substring(buffer, size, cur);
-		if (substr.offset == MDNS_INVALID_POS)
+		if ((substr.offset == MDNS_INVALID_POS) || (counter++ > MDNS_MAX_SUBSTRINGS))
 			return result;
 		if (substr.ref && (end == MDNS_INVALID_POS))
 			end = cur + 2;
@@ -629,6 +636,8 @@ mdns_records_parse(int sock, const struct sockaddr* from, size_t addrlen, const 
 	for (size_t i = 0; i < records; ++i) {
 		size_t name_offset = *offset;
 		mdns_string_skip(buffer, size, offset);
+		if (((*offset) + 10) > size)
+			return parsed;
 		size_t name_length = (*offset) - name_offset;
 		const uint16_t* data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, *offset);
 
@@ -640,7 +649,7 @@ mdns_records_parse(int sock, const struct sockaddr* from, size_t addrlen, const 
 
 		*offset += 10;
 
-		if (do_callback) {
+		if (do_callback && (length <= (size - (*offset)))) {
 			++parsed;
 			if (callback(sock, from, addrlen, type, query_id, rtype, rclass, ttl, buffer, size,
 			             name_offset, name_length, *offset, length, user_data))
@@ -775,7 +784,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 			return 0;
 	}
 
-	int do_callback = 1;
+	int do_callback = (callback ? 1 : 0);
 	for (i = 0; i < answer_rrs; ++i) {
 		size_t ofs = MDNS_POINTER_DIFF(data, buffer);
 		size_t verify_ofs = 12;
@@ -784,6 +793,8 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 		int is_answer = mdns_string_equal(buffer, data_size, &ofs, mdns_services_query,
 		                                  sizeof(mdns_services_query), &verify_ofs);
 		size_t name_length = ofs - name_offset;
+		if ((ofs + 10) > data_size)
+			return records;
 		data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, ofs);
 
 		uint16_t rtype = mdns_ntohs(data++);
@@ -791,7 +802,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 		uint32_t ttl = mdns_ntohl(data);
 		data += 2;
 		uint16_t length = mdns_ntohs(data++);
-		if (length >= (data_size - ofs))
+		if (length > (data_size - ofs))
 			return 0;
 
 		if (is_answer && do_callback) {
