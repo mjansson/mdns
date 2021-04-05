@@ -5,16 +5,26 @@
 
 #include <stdio.h>
 
-#include "mdns.h"
-
 #include <errno.h>
 
 #ifdef _WIN32
+#include <winsock2.h>
 #include <iphlpapi.h>
 #define sleep(x) Sleep(x * 1000)
 #else
 #include <netdb.h>
 #include <ifaddrs.h>
+#endif
+
+#if defined(MDNS_FUZZING)
+#define recvfrom(sock, buffer, capacity, flags, src_addr, addrlen) ((mdns_ssize_t)capacity)
+#define printf
+#endif
+
+#include "mdns.h"
+
+#if defined(MDNS_FUZZING)
+#undef recvfrom
 #endif
 
 static char addrbuffer[64];
@@ -23,17 +33,17 @@ static char namebuffer[256];
 static char sendbuffer[256];
 static mdns_record_txt_t txtbuffer[128];
 
-static uint32_t service_address_ipv4;
-static uint8_t service_address_ipv6[16];
+static struct sockaddr_in service_address_ipv4;
+static struct sockaddr_in6 service_address_ipv6;
 
 static int has_ipv4;
 static int has_ipv6;
 
 typedef struct {
-	const char* service;
-	const char* hostname;
-	uint32_t address_ipv4;
-	uint8_t* address_ipv6;
+	mdns_string_t service;
+	mdns_string_t hostname;
+	struct sockaddr_in address_ipv4;
+	struct sockaddr_in6 address_ipv6;
 	int port;
 } service_record_t;
 
@@ -156,63 +166,83 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
                  uint16_t query_id, uint16_t rtype, uint16_t rclass, uint32_t ttl, const void* data,
                  size_t size, size_t name_offset, size_t name_length, size_t record_offset,
                  size_t record_length, void* user_data) {
-	(void)sizeof(name_offset);
-	(void)sizeof(name_length);
 	(void)sizeof(ttl);
 	if (entry != MDNS_ENTRYTYPE_QUESTION)
 		return 0;
 	mdns_string_t fromaddrstr = ip_address_to_string(addrbuffer, sizeof(addrbuffer), from, addrlen);
 	if (rtype == MDNS_RECORDTYPE_PTR) {
-		mdns_string_t service = mdns_record_parse_ptr(data, size, record_offset, record_length,
-		                                              namebuffer, sizeof(namebuffer));
+		mdns_string_t name = mdns_record_parse_ptr(data, size, name_offset, name_length, namebuffer,
+		                                           sizeof(namebuffer));
 		printf("%.*s : question PTR %.*s\n", MDNS_STRING_FORMAT(fromaddrstr),
-		       MDNS_STRING_FORMAT(service));
+		       MDNS_STRING_FORMAT(name));
 
 		const char dns_sd[] = "_services._dns-sd._udp.local.";
 		const service_record_t* service_record = (const service_record_t*)user_data;
-		size_t service_length = strlen(service_record->service);
-		if ((service.length == (sizeof(dns_sd) - 1)) &&
-		    (strncmp(service.str, dns_sd, sizeof(dns_sd) - 1) == 0)) {
-			printf("  --> answer %s\n", service_record->service);
+		if ((name.length == (sizeof(dns_sd) - 1)) &&
+		    (strncmp(name.str, dns_sd, sizeof(dns_sd) - 1) == 0)) {
+			// The query was for the DNS-SD domain, send answer with a PTR record for the service
+			// name we advertise, typically on the "_service-name._tcp.local." format
+			printf("  --> answer %.*s\n", MDNS_STRING_FORMAT(service_record->service));
 			mdns_discovery_answer(sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
-			                      service_record->service, service_length);
-		} else if ((service.length == service_length) &&
-		           (strncmp(service.str, service_record->service, service_length) == 0)) {
+			                      service_record->service.str, service_record->service.length);
+		} else if ((name.length == service_record->service.length) &&
+		           (strncmp(name.str, service_record->service.str, name.length) == 0)) {
+			// The query was for our service, answer a PTR record reverse mapping
+			// the queried service name to our service instance name (typically on the
+			// "<hostname>._service-name._tcp.local." format), and add additional records containing
+			// the SRV record mapping the service instance name to our hostname and port, as well as
+			// any IPv4/IPv6 address for the hostname as A/AAAA records, and two test TXT records
+			char service_instance_buffer[256] = {0};
+			snprintf(service_instance_buffer, sizeof(service_instance_buffer) - 1, "%.*s.%.*s",
+			         MDNS_STRING_FORMAT(service_record->hostname),
+			         MDNS_STRING_FORMAT(service_record->service));
+			mdns_string_t service_instance = {service_instance_buffer,
+			                                  strlen(service_instance_buffer)};
+			mdns_record_t answer = {
+			    .name = name, .type = MDNS_RECORDTYPE_PTR, .data.ptr.name = service_instance};
+			mdns_record_t additional[5] = {0};
+			size_t additional_count = 0;
+			additional[additional_count++] =
+			    (mdns_record_t){.name = service_instance,
+			                    .type = MDNS_RECORDTYPE_SRV,
+			                    .data.srv.name = service_record->hostname,
+			                    .data.srv.port = service_record->port,
+			                    .data.srv.priority = 0,
+			                    .data.srv.weight = 0};
+			if (service_record->address_ipv4.sin_family == AF_INET)
+				additional[additional_count++] =
+				    (mdns_record_t){.name = service_record->hostname,
+				                    .type = MDNS_RECORDTYPE_A,
+				                    .data.a.addr = service_record->address_ipv4};
+			if (service_record->address_ipv6.sin6_family == AF_INET6)
+				additional[additional_count++] =
+				    (mdns_record_t){.name = service_record->hostname,
+				                    .type = MDNS_RECORDTYPE_AAAA,
+				                    .data.aaaa.addr = service_record->address_ipv6};
+			additional[additional_count++] =
+			    (mdns_record_t){.name = service_instance,
+			                    .type = MDNS_RECORDTYPE_TXT,
+			                    .data.txt.key = {MDNS_STRING_CONST("test")},
+			                    .data.txt.value = {MDNS_STRING_CONST("1")}};
+			additional[additional_count++] =
+			    (mdns_record_t){.name = service_instance,
+			                    .type = MDNS_RECORDTYPE_TXT,
+			                    .data.txt.key = {MDNS_STRING_CONST("other")},
+			                    .data.txt.value = {MDNS_STRING_CONST("value")}};
+
 			uint16_t unicast = (rclass & MDNS_UNICAST_RESPONSE);
-			printf("  --> answer %s.%s port %d (%s)\n", service_record->hostname,
-			       service_record->service, service_record->port,
-			       (unicast ? "unicast" : "multicast"));
-			if (!unicast)
-				addrlen = 0;
-			char txt_record[] = "test=1";
-			mdns_query_answer(sock, from, addrlen, sendbuffer, sizeof(sendbuffer), query_id,
-			                  service_record->service, service_length, service_record->hostname,
-			                  strlen(service_record->hostname), service_record->address_ipv4,
-			                  service_record->address_ipv6, (uint16_t)service_record->port,
-			                  txt_record, sizeof(txt_record));
+			printf("  --> answer %.*s port %d (%s)\n", MDNS_STRING_FORMAT(service_instance),
+			       service_record->port, (unicast ? "unicast" : "multicast"));
+
+			if (unicast) {
+				mdns_query_answer_unicast(sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
+				                          query_id, rtype, name.str, name.length, answer,
+				                          additional, additional_count);
+			} else {
+				mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer), answer,
+				                            additional, additional_count);
+			}
 		}
-	} else if (rtype == MDNS_RECORDTYPE_SRV) {
-		mdns_record_srv_t service = mdns_record_parse_srv(data, size, record_offset, record_length,
-		                                                  namebuffer, sizeof(namebuffer));
-		printf("%.*s : question SRV %.*s\n", MDNS_STRING_FORMAT(fromaddrstr),
-		       MDNS_STRING_FORMAT(service.name));
-#if 0
-		if ((service.length == service_length) &&
-		    (strncmp(service.str, service_record->service, service_length) == 0)) {
-			uint16_t unicast = (rclass & MDNS_UNICAST_RESPONSE);
-			printf("  --> answer %s.%s port %d (%s)\n", service_record->hostname,
-			       service_record->service, service_record->port,
-			       (unicast ? "unicast" : "multicast"));
-			if (!unicast)
-				addrlen = 0;
-			char txt_record[] = "test=1";
-			mdns_query_answer(sock, from, addrlen, sendbuffer, sizeof(sendbuffer), query_id,
-			                  service_record->service, service_length, service_record->hostname,
-			                  strlen(service_record->hostname), service_record->address_ipv4,
-			                  service_record->address_ipv6, (uint16_t)service_record->port,
-			                  txt_record, sizeof(txt_record));
-		}
-#endif
 	}
 	return 0;
 }
@@ -265,7 +295,7 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 				    (saddr->sin_addr.S_un.S_un_b.s_b4 != 1)) {
 					int log_addr = 0;
 					if (first_ipv4) {
-						service_address_ipv4 = saddr->sin_addr.S_un.S_addr;
+						service_address_ipv4 = *saddr;
 						first_ipv4 = 0;
 						log_addr = 1;
 					}
@@ -298,7 +328,7 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 				    memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
 					int log_addr = 0;
 					if (first_ipv6) {
-						memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
+						service_address_ipv6 = *saddr;
 						first_ipv6 = 0;
 						log_addr = 1;
 					}
@@ -592,11 +622,11 @@ service_mdns(const char* hostname, const char* service, int service_port) {
 	size_t capacity = 2048;
 	void* buffer = malloc(capacity);
 
-	service_record_t service_record;
-	service_record.service = service;
-	service_record.hostname = hostname;
-	service_record.address_ipv4 = has_ipv4 ? service_address_ipv4 : 0;
-	service_record.address_ipv6 = has_ipv6 ? service_address_ipv6 : 0;
+	service_record_t service_record = {0};
+	service_record.service = (mdns_string_t){service, strlen(service)};
+	service_record.hostname = (mdns_string_t){hostname, strlen(hostname)};
+	service_record.address_ipv4 = service_address_ipv4;
+	service_record.address_ipv6 = service_address_ipv6;
 	service_record.port = service_port;
 
 	// This is a crude implementation that checks for incoming queries
@@ -631,6 +661,83 @@ service_mdns(const char* hostname, const char* service, int service_port) {
 
 	return 0;
 }
+
+#ifdef MDNS_FUZZING
+
+#undef printf
+
+// Fuzzing by piping random data into the recieve functions
+static void
+fuzz_mdns(void) {
+#define MAX_FUZZ_SIZE 4096
+#define MAX_PASSES (1024 * 1024 * 1024)
+
+	static uint8_t fuzz_mdns_services_query[] = {
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, '_',
+	    's',  'e',  'r',  'v',  'i',  'c',  'e',  's',  0x07, '_',  'd',  'n',  's',  '-',
+	    's',  'd',  0x04, '_',  'u',  'd',  'p',  0x05, 'l',  'o',  'c',  'a',  'l',  0x00};
+
+	uint8_t* buffer = malloc(MAX_FUZZ_SIZE);
+	uint8_t* strbuffer = malloc(MAX_FUZZ_SIZE);
+	for (int ipass = 0; ipass < MAX_PASSES; ++ipass) {
+		size_t size = rand() % MAX_FUZZ_SIZE;
+		for (size_t i = 0; i < size; ++i)
+			buffer[i] = rand() & 0xFF;
+
+		if (ipass % 4) {
+			// Crafted fuzzing, make sure header is reasonable
+			memcpy(buffer, fuzz_mdns_services_query, sizeof(fuzz_mdns_services_query));
+			uint16_t* header = (uint16_t*)buffer;
+			header[0] = 0;
+			header[1] = htons(0x8400);
+			for (int ival = 2; ival < 6; ++ival)
+				header[ival] = rand() & 0xFF;
+		}
+		mdns_discovery_recv(0, (void*)buffer, size, query_callback, 0);
+
+		mdns_socket_listen(0, (void*)buffer, size, service_callback, 0);
+
+		if (ipass % 4) {
+			// Crafted fuzzing, make sure header is reasonable (1 question claimed).
+			// Earlier passes will have done completely random data
+			uint16_t* header = (uint16_t*)buffer;
+			header[2] = htons(1);
+		}
+		mdns_query_recv(0, (void*)buffer, size, query_callback, 0, 0);
+
+		// Fuzzing by piping random data into the parse functions
+		size_t offset = size ? (rand() % size) : 0;
+		size_t length = size ? (rand() % (size - offset)) : 0;
+		mdns_record_parse_ptr(buffer, size, offset, length, strbuffer, MAX_FUZZ_SIZE);
+
+		offset = size ? (rand() % size) : 0;
+		length = size ? (rand() % (size - offset)) : 0;
+		mdns_record_parse_srv(buffer, size, offset, length, strbuffer, MAX_FUZZ_SIZE);
+
+		struct sockaddr_in addr_ipv4;
+		offset = size ? (rand() % size) : 0;
+		length = size ? (rand() % (size - offset)) : 0;
+		mdns_record_parse_a(buffer, size, offset, length, &addr_ipv4);
+
+		struct sockaddr_in6 addr_ipv6;
+		offset = size ? (rand() % size) : 0;
+		length = size ? (rand() % (size - offset)) : 0;
+		mdns_record_parse_aaaa(buffer, size, offset, length, &addr_ipv6);
+
+		offset = size ? (rand() % size) : 0;
+		length = size ? (rand() % (size - offset)) : 0;
+		mdns_record_parse_txt(buffer, size, offset, length, (mdns_record_txt_t*)strbuffer,
+		                      MAX_FUZZ_SIZE);
+
+		if (ipass && !(ipass % 10000))
+			printf("Completed fuzzing pass %d\n", ipass);
+	}
+
+	free(buffer);
+	free(strbuffer);
+}
+
+#endif
 
 int
 main(int argc, const char* const* argv) {
@@ -686,6 +793,9 @@ main(int argc, const char* const* argv) {
 		}
 	}
 
+#ifdef MDNS_FUZZING
+	fuzz_mdns();
+#else
 	int ret;
 	if (mode == 0)
 		ret = send_dns_sd();
@@ -693,6 +803,7 @@ main(int argc, const char* const* argv) {
 		ret = send_mdns_query(service);
 	else if (mode == 2)
 		ret = service_mdns(hostname, service, service_port);
+#endif
 
 #ifdef _WIN32
 	WSACleanup();
