@@ -30,7 +30,7 @@
 static char addrbuffer[64];
 static char entrybuffer[256];
 static char namebuffer[256];
-static char sendbuffer[256];
+static char sendbuffer[1024];
 static mdns_record_txt_t txtbuffer[128];
 
 static struct sockaddr_in service_address_ipv4;
@@ -181,7 +181,7 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 		if ((name.length == (sizeof(dns_sd) - 1)) &&
 		    (strncmp(name.str, dns_sd, sizeof(dns_sd) - 1) == 0)) {
 			// The query was for the DNS-SD domain, send answer with a PTR record for the service
-			// name we advertise, typically on the "_service-name._tcp.local." format
+			// name we advertise, typically on the "<_service-name>._tcp.local." format
 			printf("  --> answer %.*s\n", MDNS_STRING_FORMAT(service_record->service));
 			mdns_discovery_answer(sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
 			                      service_record->service.str, service_record->service.length);
@@ -189,36 +189,58 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 		           (strncmp(name.str, service_record->service.str, name.length) == 0)) {
 			// The query was for our service, answer a PTR record reverse mapping
 			// the queried service name to our service instance name (typically on the
-			// "<hostname>._service-name._tcp.local." format), and add additional records containing
-			// the SRV record mapping the service instance name to our hostname and port, as well as
-			// any IPv4/IPv6 address for the hostname as A/AAAA records, and two test TXT records
-			char service_instance_buffer[256] = {0};
+			// "<hostname>.<_service-name>._tcp.local." format), and add additional records
+			// containing the SRV record mapping the service instance name to our qualified hostname
+			// (typically
+			// "<hostname>.local.") and port, as well as any IPv4/IPv6 address for the hostname as
+			// A/AAAA records, and two test TXT records
+
+			// Build the service instance "<hostname>.<_service-name>._tcp.local." string
+			char service_instance_buffer[128] = {0};
 			snprintf(service_instance_buffer, sizeof(service_instance_buffer) - 1, "%.*s.%.*s",
 			         MDNS_STRING_FORMAT(service_record->hostname),
 			         MDNS_STRING_FORMAT(service_record->service));
 			mdns_string_t service_instance = {service_instance_buffer,
 			                                  strlen(service_instance_buffer)};
+
+			// Build the "<hostname>.local." string
+			char qualified_hostname_buffer[128] = {0};
+			snprintf(qualified_hostname_buffer, sizeof(qualified_hostname_buffer) - 1,
+			         "%.*s.local.", MDNS_STRING_FORMAT(service_record->hostname));
+			mdns_string_t qualified_hostname = {qualified_hostname_buffer,
+			                                    strlen(qualified_hostname_buffer)};
+
+			// Answer record reverse mapping "<_service-name>._tcp.local." to
+			// "<hostname>.<_service-name>._tcp.local."
 			mdns_record_t answer = {
 			    .name = name, .type = MDNS_RECORDTYPE_PTR, .data.ptr.name = service_instance};
+
 			mdns_record_t additional[5] = {0};
 			size_t additional_count = 0;
-			additional[additional_count++] =
-			    (mdns_record_t){.name = service_instance,
-			                    .type = MDNS_RECORDTYPE_SRV,
-			                    .data.srv.name = service_record->hostname,
-			                    .data.srv.port = service_record->port,
-			                    .data.srv.priority = 0,
-			                    .data.srv.weight = 0};
+
+			// SRV record mapping "<hostname>.<_service-name>._tcp.local." to "<hostname>.local."
+			// with port. Set weight & priority to 0.
+			additional[additional_count++] = (mdns_record_t){.name = service_instance,
+			                                                 .type = MDNS_RECORDTYPE_SRV,
+			                                                 .data.srv.name = qualified_hostname,
+			                                                 .data.srv.port = service_record->port,
+			                                                 .data.srv.priority = 0,
+			                                                 .data.srv.weight = 0};
+
+			// A/AAAA records mapping "<hostname>.local." to IPv4/IPv6 addresses
 			if (service_record->address_ipv4.sin_family == AF_INET)
 				additional[additional_count++] =
-				    (mdns_record_t){.name = service_record->hostname,
+				    (mdns_record_t){.name = qualified_hostname,
 				                    .type = MDNS_RECORDTYPE_A,
 				                    .data.a.addr = service_record->address_ipv4};
 			if (service_record->address_ipv6.sin6_family == AF_INET6)
 				additional[additional_count++] =
-				    (mdns_record_t){.name = service_record->hostname,
+				    (mdns_record_t){.name = qualified_hostname,
 				                    .type = MDNS_RECORDTYPE_AAAA,
 				                    .data.aaaa.addr = service_record->address_ipv6};
+
+			// Add two test TXT records for our service instance name, will be coalesced into one
+			// record with both key-value pair strings by the library
 			additional[additional_count++] =
 			    (mdns_record_t){.name = service_instance,
 			                    .type = MDNS_RECORDTYPE_TXT,
@@ -230,16 +252,17 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 			                    .data.txt.key = {MDNS_STRING_CONST("other")},
 			                    .data.txt.value = {MDNS_STRING_CONST("value")}};
 
+			// Send the answer
 			uint16_t unicast = (rclass & MDNS_UNICAST_RESPONSE);
 			printf("  --> answer %.*s port %d (%s)\n", MDNS_STRING_FORMAT(service_instance),
 			       service_record->port, (unicast ? "unicast" : "multicast"));
 
 			if (unicast) {
 				mdns_query_answer_unicast(sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
-				                          query_id, rtype, name.str, name.length, answer,
+				                          query_id, rtype, name.str, name.length, answer, 0, 0,
 				                          additional, additional_count);
 			} else {
-				mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer), answer,
+				mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer), answer, 0, 0,
 				                            additional, additional_count);
 			}
 		}
