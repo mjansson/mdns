@@ -1282,7 +1282,7 @@ mdns_answer_add_txt_record(void* buffer, size_t capacity, void* data, mdns_recor
 		size_t string_length =
 		    records[irec].data.txt.key.length + records[irec].data.txt.value.length + 1;
 		remain = capacity - MDNS_POINTER_DIFF(data, buffer);
-		if (!data || (remain <= string_length))
+		if (!data || (remain <= string_length) || (string_length > 0x3FFF))
 			return 0;
 
 		unsigned char* strdata = (unsigned char*)data;
