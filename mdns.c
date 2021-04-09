@@ -252,7 +252,7 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 			                    .data.txt.key = {MDNS_STRING_CONST("other")},
 			                    .data.txt.value = {MDNS_STRING_CONST("value")}};
 
-			// Send the answer
+			// Send the answer, unicast or multicast depending on flag in query
 			uint16_t unicast = (rclass & MDNS_UNICAST_RESPONSE);
 			printf("  --> answer %.*s port %d (%s)\n", MDNS_STRING_FORMAT(service_instance),
 			       service_record->port, (unicast ? "unicast" : "multicast"));
