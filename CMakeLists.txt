@@ -24,10 +24,12 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 # example
 # ##############################################################################
 
-if(MDNS_BUILD_EXAMPLE)
-  add_executable(${PROJECT_NAME}_example mdns.c)
-  target_link_libraries(${PROJECT_NAME}_example ${PROJECT_NAME})
-endif()
+#if(MDNS_BUILD_EXAMPLE)
+#  add_executable(${PROJECT_NAME}_example mdns.c)
+#  target_link_libraries(${PROJECT_NAME}_example ${PROJECT_NAME})
+#endif()
+
+add_executable(afl-driver afl-driver.c)
 
 # ##############################################################################
 # install

@@ -740,7 +740,7 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 #ifdef __APPLE__
 	saddr->sa_len = sizeof(addr);
 #endif
-	mdns_ssize_t ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
+	mdns_ssize_t ret = fake_recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
@@ -836,7 +836,7 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 #ifdef __APPLE__
 	saddr->sa_len = sizeof(addr);
 #endif
-	mdns_ssize_t ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
+	mdns_ssize_t ret = fake_recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
@@ -984,7 +984,7 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 #ifdef __APPLE__
 	saddr->sa_len = sizeof(addr);
 #endif
-	mdns_ssize_t ret = recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
+	mdns_ssize_t ret = fake_recvfrom(sock, (char*)buffer, (mdns_size_t)capacity, 0, saddr, &addrlen);
 	if (ret <= 0)
 		return 0;
 
