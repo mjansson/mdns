@@ -510,7 +510,7 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 			if (saddr->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
 				int log_addr = 0;
 				if (first_ipv4) {
-					service_address_ipv4 = saddr->sin_addr.s_addr;
+					service_address_ipv4 = *saddr;
 					first_ipv4 = 0;
 					log_addr = 1;
 				}
@@ -542,7 +542,7 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 			    memcmp(saddr->sin6_addr.s6_addr, localhost_mapped, 16)) {
 				int log_addr = 0;
 				if (first_ipv6) {
-					memcpy(service_address_ipv6, &saddr->sin6_addr, 16);
+					service_address_ipv6 = *saddr;
 					first_ipv6 = 0;
 					log_addr = 1;
 				}
