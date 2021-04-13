@@ -1296,17 +1296,9 @@ mdns_answer_add_txt_record(void* buffer, size_t capacity, void* data, mdns_recor
 		data = strdata;
 	}
 
-	remain = capacity - MDNS_POINTER_DIFF(data, buffer);
-	if (!data || (record_data && !remain))
-		return 0;
-
-	if (record_data) {
-		*(unsigned char*)data = 0;
-		data = MDNS_POINTER_OFFSET(data, 1);
-
-		// Fill record length
+	// Fill record length
+	if (record_data)
 		mdns_htons(record_length, (uint16_t)MDNS_POINTER_DIFF(data, record_data));
-	}
 
 	return data;
 }

@@ -46,6 +46,8 @@ To send a one-shot mDNS query for a single record use `mdns_query_send`. This wi
 
 To read query responses use `mdns_query_recv`. All records received since last call will be piped to the callback supplied in the function call. If `query_id` parameter is non-zero the function will filter out any response with a query ID that does not match the given query ID. The entry type will be one of `MDNS_ENTRYTYPE_ANSWER`, `MDNS_ENTRYTYPE_AUTHORITY` and `MDNS_ENTRYTYPE_ADDITIONAL`.
 
+Note that a socket opened for one-shot queries from an emphemeral port will not recieve any unsolicited answers (announces) as these are sent as a multicast on port 5353.
+
 ### Service
 
 To listen for incoming DNS-SD requests and mDNS queries the socket can be opened/setup on the default interface by passing 0 as socket address in the call to the socket open/setup functions (the socket will receive data from all network interfaces). Then call `mdns_socket_listen` either on notification of incoming data, or by setting blocking mode and calling `mdns_socket_listen` to block until data is available and parsed.
@@ -58,7 +60,7 @@ If the service record name is a service you provide, use `mdns_query_answer_unic
 
 See the test executable implementation for more details on how to handle the parameters to the given functions.
 
-## Announce
+### Announce
 
 If you provide a mDNS service listening and answering queries on port 5353 it is encouraged to send announcement on startup of your service (as an unsolicited answer). Use the `mdns_announce_multicast` to announce the records for your service.
 

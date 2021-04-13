@@ -720,7 +720,7 @@ send_mdns_query(const char* service, int record) {
 	printf("Reading mDNS query replies\n");
 	do {
 		struct timeval timeout;
-		timeout.tv_sec = 5;
+		timeout.tv_sec = 10;
 		timeout.tv_usec = 0;
 
 		int nfds = 0;
