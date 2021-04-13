@@ -1,0 +1,9 @@
+1.4
+
+Returning non-zero from callback function during record parsing immedediately stops parsing and returns the number of records parsed so far.
+
+The function to send a query answer has been split in two, one for unicast answer and one for multicast.
+
+The functions to send query answers have been generalized to send any number of records.
+
+Added new function to do multicast announce on start/wake-up (unsolicited answer).
