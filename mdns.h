@@ -60,7 +60,9 @@ enum mdns_record_type {
 	// IP6 Address [Thomson]
 	MDNS_RECORDTYPE_AAAA = 28,
 	// Server Selection [RFC2782]
-	MDNS_RECORDTYPE_SRV = 33
+	MDNS_RECORDTYPE_SRV = 33,
+	// Any available records
+	MDNS_RECORDTYPE_ANY = 255
 };
 
 enum mdns_entry_type {
@@ -220,12 +222,6 @@ mdns_discovery_send(int sock);
 static size_t
 mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn callback,
                     void* user_data);
-
-//! Send a unicast DNS-SD answer with a single record to the given address. Buffer must be 32 bit
-//  aligned. Returns 0 if success, or <0 if error.
-static int
-mdns_discovery_answer(int sock, const void* address, size_t address_size, void* buffer,
-                      size_t capacity, const char* record, size_t length);
 
 //! Send a multicast mDNS query on the given socket for the given service name. The supplied buffer
 //! will be used to build the query packet and must be 32 bit aligned. The query ID can be set to
@@ -985,10 +981,10 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 		size_t question_offset = MDNS_POINTER_DIFF(data, buffer);
 		size_t offset = question_offset;
 		size_t verify_ofs = 12;
+		int dns_sd = 0;
 		if (mdns_string_equal(buffer, data_size, &offset, mdns_services_query,
 		                      sizeof(mdns_services_query), &verify_ofs)) {
-			if (flags || (questions != 1))
-				return 0;
+			dns_sd = 1;
 		} else {
 			offset = question_offset;
 			if (!mdns_string_skip(buffer, data_size, &offset))
@@ -1002,7 +998,9 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 
 		// Make sure we get a question of class IN
 		if ((rclass & 0x7FFF) != MDNS_CLASS_IN)
-			return 0;
+			break;
+		if (dns_sd && flags)
+			continue;
 
 		++parsed;
 		if (callback && callback(sock, saddr, addrlen, MDNS_ENTRYTYPE_QUESTION, query_id, rtype,
@@ -1012,41 +1010,6 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 	}
 
 	return parsed;
-}
-
-static int
-mdns_discovery_answer(int sock, const void* address, size_t address_size, void* buffer,
-                      size_t capacity, const char* record, size_t length) {
-	if (capacity < (sizeof(mdns_services_query) + 32 + length))
-		return -1;
-
-	void* data = buffer;
-	// Basic reply structure
-	memcpy(data, mdns_services_query, sizeof(mdns_services_query));
-	// Flags
-	mdns_htons(MDNS_POINTER_OFFSET(data, 2), 0x8400U);
-	// One answer
-	mdns_htons(MDNS_POINTER_OFFSET(data, 6), 1);
-
-	// Fill in answer PTR record
-	data = MDNS_POINTER_OFFSET(buffer, sizeof(mdns_services_query));
-	// Reference _services._dns-sd._udp.local. string in question
-	data = mdns_htons(data, 0xC000U | 12U);
-	// Type
-	data = mdns_htons(data, MDNS_RECORDTYPE_PTR);
-	// Rclass
-	data = mdns_htons(data, MDNS_CLASS_IN);
-	// TTL
-	data = mdns_htonl(data, 10);
-	// Record string length
-	void* record_length = data;
-	data = mdns_htons(data, 0);
-	uint8_t* record_start = (uint8_t*)data;
-	data = (uint8_t*)mdns_string_make(buffer, capacity, data, record, length, 0);
-	mdns_htons(record_length, (uint16_t)MDNS_POINTER_DIFF(data, record_start));
-
-	size_t tosend = MDNS_POINTER_DIFF(data, buffer);
-	return mdns_unicast_send(sock, address, address_size, buffer, tosend);
 }
 
 static int

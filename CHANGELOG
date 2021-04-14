@@ -7,3 +7,7 @@ The function to send a query answer has been split in two, one for unicast answe
 The functions to send query answers have been generalized to send any number of records.
 
 Added new function to do multicast announce on start/wake-up (unsolicited answer).
+
+Added parsing of ANY question records and DNS-SD queries with multiple questions
+
+Removed mdns_discovery_answer in favour of the new generalized answer functions, to handle both unicast and multicast response
