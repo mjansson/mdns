@@ -119,8 +119,8 @@ query_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry
 	(void)sizeof(user_data);
 	mdns_string_t fromaddrstr = ip_address_to_string(addrbuffer, sizeof(addrbuffer), from, addrlen);
 	const char* entrytype = (entry == MDNS_ENTRYTYPE_ANSWER) ?
-	                            "answer" :
-	                            ((entry == MDNS_ENTRYTYPE_AUTHORITY) ? "authority" : "additional");
+                                "answer" :
+                                ((entry == MDNS_ENTRYTYPE_AUTHORITY) ? "authority" : "additional");
 	mdns_string_t entrystr =
 	    mdns_string_extract(data, size, &name_offset, entrybuffer, sizeof(entrybuffer));
 	if (rtype == MDNS_RECORDTYPE_PTR) {
@@ -212,23 +212,21 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 
 			// Answer PTR record reverse mapping "<_service-name>._tcp.local." to
 			// "<hostname>.<_service-name>._tcp.local."
-			mdns_record_t answer = {.name = name,
-			                        .type = MDNS_RECORDTYPE_PTR,
-			                        .data.ptr.name = service->service};
+			mdns_record_t answer = {
+			    .name = name, .type = MDNS_RECORDTYPE_PTR, .data.ptr.name = service->service};
 
 			// Send the answer, unicast or multicast depending on flag in query
 			uint16_t unicast = (rclass & MDNS_UNICAST_RESPONSE);
-			printf("  --> answer %.*s (%s)\n",
-			       MDNS_STRING_FORMAT(answer.data.ptr.name),
+			printf("  --> answer %.*s (%s)\n", MDNS_STRING_FORMAT(answer.data.ptr.name),
 			       (unicast ? "unicast" : "multicast"));
 
 			if (unicast) {
 				mdns_query_answer_unicast(sock, from, addrlen, sendbuffer, sizeof(sendbuffer),
-				                          query_id, rtype, name.str, name.length, answer, 0, 0,
-				                          0, 0);
+				                          query_id, rtype, name.str, name.length, answer, 0, 0, 0,
+				                          0);
 			} else {
-				mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer), answer, 0, 0,
-				                            0, 0);
+				mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer), answer, 0, 0, 0,
+				                            0);
 			}
 		}
 	} else if ((name.length == service->service.length) &&
@@ -359,7 +357,7 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 				mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer), answer, 0, 0,
 				                            additional, additional_count);
 			}
-		} else if (((rtype == MDNS_RECORDTYPE_AAAA)|| (rtype == MDNS_RECORDTYPE_ANY)) &&
+		} else if (((rtype == MDNS_RECORDTYPE_AAAA) || (rtype == MDNS_RECORDTYPE_ANY)) &&
 		           (service->address_ipv6.sin6_family == AF_INET6)) {
 			// The AAAA query was for our qualified hostname (typically "<hostname>.local.") and we
 			// have an IPv6 address, answer with an AAAA record mappiing the hostname to an IPv6
@@ -386,8 +384,9 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 			    ip_address_to_string(addrbuffer, sizeof(addrbuffer),
 			                         (struct sockaddr*)&service->record_aaaa.data.aaaa.addr,
 			                         sizeof(service->record_aaaa.data.aaaa.addr));
-			printf("  --> answer %.*s IPv6 %.*s (%s)\n", MDNS_STRING_FORMAT(service->record_a.name),
-			       MDNS_STRING_FORMAT(addrstr), (unicast ? "unicast" : "multicast"));
+			printf("  --> answer %.*s IPv6 %.*s (%s)\n",
+			       MDNS_STRING_FORMAT(service->record_aaaa.name), MDNS_STRING_FORMAT(addrstr),
+			       (unicast ? "unicast" : "multicast"));
 
 			if (unicast) {
 				mdns_query_answer_unicast(sock, from, addrlen, sendbuffer, sizeof(sendbuffer),

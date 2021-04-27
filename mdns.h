@@ -1289,7 +1289,6 @@ mdns_query_answer_unicast(int sock, const void* address, size_t address_size, vo
 	if (capacity < (sizeof(struct mdns_header_t) + 32 + 4))
 		return -1;
 
-	uint16_t question_rclass = MDNS_UNICAST_RESPONSE | MDNS_CLASS_IN;
 	uint16_t rclass = MDNS_CACHE_FLUSH | MDNS_CLASS_IN;
 	uint32_t ttl = 10;
 
@@ -1304,7 +1303,6 @@ mdns_query_answer_unicast(int sock, const void* address, size_t address_size, vo
 
 	mdns_string_table_t string_table = {0};
 	void* data = MDNS_POINTER_OFFSET(buffer, sizeof(struct mdns_header_t));
-	size_t remain;
 
 	// Fill in question
 	data = mdns_answer_add_question_unicast(buffer, capacity, data, record_type, name, name_length,
@@ -1353,7 +1351,6 @@ mdns_answer_multicast_rclass(int sock, void* buffer, size_t capacity, uint16_t r
 
 	mdns_string_table_t string_table = {0};
 	void* data = MDNS_POINTER_OFFSET(buffer, sizeof(struct mdns_header_t));
-	size_t remain;
 
 	// Fill in answer
 	data = mdns_answer_add_record(buffer, capacity, data, answer, rclass, ttl, &string_table);
