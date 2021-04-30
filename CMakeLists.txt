@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.0)
 project(mdns VERSION 1.2.0)
 
 option(MDNS_BUILD_EXAMPLE "build example" ON)
