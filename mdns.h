@@ -718,7 +718,8 @@ mdns_string_make(void* buffer, size_t capacity, void* data, const char* name, si
 
 		size_t ref_offset =
 		    mdns_string_table_find(string_table, buffer, capacity,
-		                           MDNS_POINTER_OFFSET(name, last_pos), sub_length, total_length);
+		                           (char*)MDNS_POINTER_OFFSET(name, last_pos), sub_length,
+		                           total_length);
 		if (ref_offset != MDNS_INVALID_POS)
 			return mdns_string_make_ref(data, remain, ref_offset);
 
