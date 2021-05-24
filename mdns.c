@@ -785,6 +785,19 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 	}
 	printf("Opened %d socket%s for mDNS service\n", num_sockets, num_sockets ? "s" : "");
 
+	size_t service_name_length = strlen(service_name);
+	if (!service_name_length) {
+		printf("Invalid service name\n");
+		return -1;
+	}
+
+	char* service_name_buffer = malloc(service_name_length + 2);
+	memcpy(service_name_buffer, service_name, service_name_length);
+	if (service_name_buffer[service_name_length - 1] != '.')
+		service_name_buffer[service_name_length++] = '.';
+	service_name_buffer[service_name_length] = 0;
+	service_name = service_name_buffer;
+
 	printf("Service mDNS: %s:%d\n", service_name, service_port);
 	printf("Hostname: %s\n", hostname);
 
@@ -896,6 +909,7 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 	}
 
 	free(buffer);
+	free(service_name_buffer);
 
 	for (int isock = 0; isock < num_sockets; ++isock)
 		mdns_socket_close(sockets[isock]);
