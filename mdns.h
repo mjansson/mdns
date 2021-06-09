@@ -706,13 +706,12 @@ mdns_string_make_ref(void* data, size_t capacity, size_t ref_offset) {
 static void*
 mdns_string_make(void* buffer, size_t capacity, void* data, const char* name, size_t length,
                  mdns_string_table_t* string_table) {
-	size_t pos = 0;
 	size_t last_pos = 0;
 	size_t remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	if (name[length - 1] == '.')
 		--length;
 	while (last_pos < length) {
-		pos = mdns_string_find(name, length, '.', last_pos);
+		size_t pos = mdns_string_find(name, length, '.', last_pos);
 		size_t sub_length = ((pos != MDNS_INVALID_POS) ? pos : length) - last_pos;
 		size_t total_length = length - last_pos;
 
@@ -1457,7 +1456,6 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
                       mdns_record_txt_t* records, size_t capacity) {
 	size_t parsed = 0;
 	const char* strdata;
-	size_t separator, sublength;
 	size_t end = offset + length;
 
 	if (size < end)
@@ -1465,12 +1463,12 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 
 	while ((offset < end) && (parsed < capacity)) {
 		strdata = (const char*)MDNS_POINTER_OFFSET(buffer, offset);
-		sublength = *(const unsigned char*)strdata;
+		size_t sublength = *(const unsigned char*)strdata;
 
 		++strdata;
 		offset += sublength + 1;
 
-		separator = 0;
+		size_t separator = 0;
 		for (size_t c = 0; c < sublength; ++c) {
 			// DNS-SD TXT record keys MUST be printable US-ASCII, [0x20, 0x7E]
 			if ((strdata[c] < 0x20) || (strdata[c] > 0x7E))
