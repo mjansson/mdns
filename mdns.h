@@ -1136,8 +1136,10 @@ mdns_answer_add_question_unicast(void* buffer, size_t capacity, void* data,
                                  mdns_record_type_t record_type, const char* name,
                                  size_t name_length, mdns_string_table_t* string_table) {
 	data = mdns_string_make(buffer, capacity, data, name, name_length, string_table);
+	if (!data)
+		return 0;
 	size_t remain = capacity - MDNS_POINTER_DIFF(data, buffer);
-	if (!data || (remain <= 4))
+	if (remain < 4)
 		return 0;
 
 	data = mdns_htons(data, record_type);
@@ -1149,10 +1151,11 @@ mdns_answer_add_question_unicast(void* buffer, size_t capacity, void* data,
 static void*
 mdns_answer_add_record_header(void* buffer, size_t capacity, void* data, mdns_record_t record,
                               uint16_t rclass, uint32_t ttl, mdns_string_table_t* string_table) {
-	data =
-	    mdns_string_make(buffer, capacity, data, record.name.str, record.name.length, string_table);
+	data = mdns_string_make(buffer, capacity, data, record.name.str, record.name.length, string_table);
+	if (!data)
+		return 0;
 	size_t remain = capacity - MDNS_POINTER_DIFF(data, buffer);
-	if (!data || (remain < 10))
+	if (remain < 10)
 		return 0;
 
 	data = mdns_htons(data, record.type);
@@ -1244,8 +1247,10 @@ mdns_answer_add_txt_record(void* buffer, size_t capacity, void* data, mdns_recor
 		// termination, thus the <= check
 		size_t string_length =
 		    records[irec].data.txt.key.length + records[irec].data.txt.value.length + 1;
+		if (!data)
+			return 0;
 		remain = capacity - MDNS_POINTER_DIFF(data, buffer);
-		if (!data || (remain <= string_length) || (string_length > 0x3FFF))
+		if ((remain <= string_length) || (string_length > 0x3FFF))
 			return 0;
 
 		unsigned char* strdata = (unsigned char*)data;
