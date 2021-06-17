@@ -173,7 +173,7 @@ struct mdns_header_t {
 //! random user level ephemeral port. To run discovery service listening for incoming discoveries
 //! and queries, you must set MDNS_PORT as port.
 static int
-mdns_socket_open_ipv4(struct sockaddr_in* saddr);
+mdns_socket_open_ipv4(const struct sockaddr_in* saddr);
 
 //! Setup an already opened IPv4 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //! pass in the appropriate socket address in saddr, otherwise pass a null pointer for INADDR_ANY.
@@ -181,7 +181,7 @@ mdns_socket_open_ipv4(struct sockaddr_in* saddr);
 //! random user level ephemeral port. To run discovery service listening for incoming discoveries
 //! and queries, you must set MDNS_PORT as port.
 static int
-mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr);
+mdns_socket_setup_ipv4(int sock, const struct sockaddr_in* saddr);
 
 //! Open and setup a IPv6 socket for mDNS/DNS-SD. To bind the socket to a specific interface, pass
 //! in the appropriate socket address in saddr, otherwise pass a null pointer for in6addr_any. To
@@ -189,7 +189,7 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr);
 //! random user level ephemeral port. To run discovery service listening for incoming discoveries
 //! and queries, you must set MDNS_PORT as port.
 static int
-mdns_socket_open_ipv6(struct sockaddr_in6* saddr);
+mdns_socket_open_ipv6(const struct sockaddr_in6* saddr);
 
 //! Setup an already opened IPv6 socket for mDNS/DNS-SD. To bind the socket to a specific interface,
 //! pass in the appropriate socket address in saddr, otherwise pass a null pointer for in6addr_any.
@@ -197,7 +197,7 @@ mdns_socket_open_ipv6(struct sockaddr_in6* saddr);
 //! random user level ephemeral port. To run discovery service listening for incoming discoveries
 //! and queries, you must set MDNS_PORT as port.
 static int
-mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr);
+mdns_socket_setup_ipv6(int sock, const struct sockaddr_in6* saddr);
 
 //! Close a socket opened with mdns_socket_open_ipv4 and mdns_socket_open_ipv6.
 static void
@@ -353,7 +353,7 @@ mdns_htonl(void* data, uint32_t val) {
 }
 
 static int
-mdns_socket_open_ipv4(struct sockaddr_in* saddr) {
+mdns_socket_open_ipv4(const struct sockaddr_in* saddr) {
 	int sock = (int)socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock < 0)
 		return -1;
@@ -365,7 +365,7 @@ mdns_socket_open_ipv4(struct sockaddr_in* saddr) {
 }
 
 static int
-mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
+mdns_socket_setup_ipv4(int sock, const struct sockaddr_in* saddr) {
 	unsigned char ttl = 1;
 	unsigned char loopback = 1;
 	unsigned int reuseaddr = 1;
@@ -387,22 +387,22 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 
 	struct sockaddr_in sock_addr;
 	if (!saddr) {
-		saddr = &sock_addr;
-		memset(saddr, 0, sizeof(struct sockaddr_in));
-		saddr->sin_family = AF_INET;
-		saddr->sin_addr.s_addr = INADDR_ANY;
+		memset(&sock_addr, 0, sizeof(struct sockaddr_in));
+		sock_addr.sin_family = AF_INET;
+		sock_addr.sin_addr.s_addr = INADDR_ANY;
 #ifdef __APPLE__
-		saddr->sin_len = sizeof(struct sockaddr_in);
+		sock_addr.sin_len = sizeof(struct sockaddr_in);
 #endif
 	} else {
-		setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&saddr->sin_addr,
-		           sizeof(saddr->sin_addr));
+		memcpy(&sock_addr, saddr, sizeof(struct sockaddr_in));
+		setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&sock_addr.sin_addr,
+		           sizeof(sock_addr.sin_addr));
 #ifndef _WIN32
-		saddr->sin_addr.s_addr = INADDR_ANY;
+		sock_addr.sin_addr.s_addr = INADDR_ANY;
 #endif
 	}
 
-	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in)))
+	if (bind(sock, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in)))
 		return -1;
 
 #ifdef _WIN32
@@ -417,7 +417,7 @@ mdns_socket_setup_ipv4(int sock, struct sockaddr_in* saddr) {
 }
 
 static int
-mdns_socket_open_ipv6(struct sockaddr_in6* saddr) {
+mdns_socket_open_ipv6(const struct sockaddr_in6* saddr) {
 	int sock = (int)socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock < 0)
 		return -1;
@@ -429,7 +429,7 @@ mdns_socket_open_ipv6(struct sockaddr_in6* saddr) {
 }
 
 static int
-mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr) {
+mdns_socket_setup_ipv6(int sock, const struct sockaddr_in6* saddr) {
 	int hops = 1;
 	unsigned int loopback = 1;
 	unsigned int reuseaddr = 1;
@@ -451,22 +451,22 @@ mdns_socket_setup_ipv6(int sock, struct sockaddr_in6* saddr) {
 
 	struct sockaddr_in6 sock_addr;
 	if (!saddr) {
-		saddr = &sock_addr;
-		memset(saddr, 0, sizeof(struct sockaddr_in6));
-		saddr->sin6_family = AF_INET6;
-		saddr->sin6_addr = in6addr_any;
+		memset(&sock_addr, 0, sizeof(struct sockaddr_in6));
+		sock_addr.sin6_family = AF_INET6;
+		sock_addr.sin6_addr = in6addr_any;
 #ifdef __APPLE__
-		saddr->sin6_len = sizeof(struct sockaddr_in6);
+		sock_addr.sin6_len = sizeof(struct sockaddr_in6);
 #endif
 	} else {
+		memcpy(&sock_addr, saddr, sizeof(struct sockaddr_in6));
 		unsigned int ifindex = 0;
 		setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_IF, (const char*)&ifindex, sizeof(ifindex));
 #ifndef _WIN32
-		saddr->sin6_addr = in6addr_any;
+		sock_addr.sin6_addr = in6addr_any;
 #endif
 	}
 
-	if (bind(sock, (struct sockaddr*)saddr, sizeof(struct sockaddr_in6)))
+	if (bind(sock, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in6)))
 		return -1;
 
 #ifdef _WIN32

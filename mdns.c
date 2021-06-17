@@ -421,6 +421,7 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 		if (ret == ERROR_BUFFER_OVERFLOW) {
 			free(adapter_address);
 			adapter_address = 0;
+			address_size *= 2;
 		} else {
 			break;
 		}
