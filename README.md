@@ -8,6 +8,8 @@ This library is put in the public domain; you can redistribute it and/or modify 
 
 Created by Mattias Jansson ([@maniccoder](https://twitter.com/maniccoder))
 
+Discord server for discussions https://discord.gg/M8BwTQrt6c
+
 ## Features
 
 The library does DNS-SD discovery and service as well as one-shot single record mDNS query and response. There are no memory allocations done by the library, all buffers used must be passed in by the caller. Custom data for use in processing can be passed along using a user data opaque pointer.
