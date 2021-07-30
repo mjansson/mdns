@@ -278,7 +278,7 @@ mdns_goodbye_multicast(int sock, void* buffer, size_t capacity, mdns_record_t an
                        mdns_record_t* authority, size_t authority_count, mdns_record_t* additional,
                        size_t additional_count);
 
-    // Parse records functions
+// Parse records functions
 
 //! Parse a PTR record, returns the name in the record
 static mdns_string_t
