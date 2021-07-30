@@ -64,7 +64,7 @@ See the test executable implementation for more details on how to handle the par
 
 ### Announce
 
-If you provide a mDNS service listening and answering queries on port 5353 it is encouraged to send announcement on startup of your service (as an unsolicited answer). Use the `mdns_announce_multicast` to announce the records for your service.
+If you provide a mDNS service listening and answering queries on port 5353 it is encouraged to send announcement on startup of your service (as an unsolicited answer). Use the `mdns_announce_multicast` to announce the records for your service at startup, and `mdns_goodbye_multicast` to announce the end of service on termination.
 
 ## Test executable
 The `mdns.c` file contains a test executable implementation using the library to do DNS-SD and mDNS queries. Compile into an executable and run to see command line options for discovery, query and service modes.
