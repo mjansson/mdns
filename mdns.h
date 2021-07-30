@@ -271,6 +271,13 @@ mdns_announce_multicast(int sock, void* buffer, size_t capacity, mdns_record_t a
                         mdns_record_t* authority, size_t authority_count, mdns_record_t* additional,
                         size_t additional_count);
 
+//! Send a variable multicast mDNS announcement. Use this on service end for removing the resource
+//! from the local network. The records must be identical to the according announcement.
+static int
+mdns_goodbye_multicast(int sock, void* buffer, size_t capacity, mdns_record_t answer,
+                       mdns_record_t* authority, size_t authority_count, mdns_record_t* additional,
+                       size_t additional_count);
+
 // Parse records functions
 
 //! Parse a PTR record, returns the name in the record
@@ -1336,14 +1343,13 @@ mdns_query_answer_unicast(int sock, const void* address, size_t address_size, vo
 	return mdns_unicast_send(sock, address, address_size, buffer, tosend);
 }
 
+
 static int
-mdns_answer_multicast_rclass(int sock, void* buffer, size_t capacity, uint16_t rclass,
+mdns_answer_multicast_rclass_ttl(int sock, void* buffer, size_t capacity, uint16_t rclass,
                              mdns_record_t answer, mdns_record_t* authority, size_t authority_count,
-                             mdns_record_t* additional, size_t additional_count) {
+                             mdns_record_t* additional, size_t additional_count, uint32_t ttl) {
 	if (capacity < (sizeof(struct mdns_header_t) + 32 + 4))
 		return -1;
-
-	uint32_t ttl = 60;
 
 	// Basic answer structure
 	struct mdns_header_t* header = (struct mdns_header_t*)buffer;
@@ -1381,6 +1387,14 @@ mdns_answer_multicast_rclass(int sock, void* buffer, size_t capacity, uint16_t r
 }
 
 static int
+mdns_answer_multicast_rclass(int sock, void* buffer, size_t capacity, uint16_t rclass,
+                             mdns_record_t answer, mdns_record_t* authority, size_t authority_count,
+                             mdns_record_t* additional, size_t additional_count) {
+	return mdns_answer_multicast_rclass_ttl(sock, buffer, capacity, rclass, answer, authority,
+	                                        authority_count, additional, additional_count, 60);
+}
+
+static int
 mdns_query_answer_multicast(int sock, void* buffer, size_t capacity, mdns_record_t answer,
                             mdns_record_t* authority, size_t authority_count,
                             mdns_record_t* additional, size_t additional_count) {
@@ -1396,6 +1410,15 @@ mdns_announce_multicast(int sock, void* buffer, size_t capacity, mdns_record_t a
 	uint16_t rclass = MDNS_CLASS_IN | MDNS_CACHE_FLUSH;
 	return mdns_answer_multicast_rclass(sock, buffer, capacity, rclass, answer, authority,
 	                                    authority_count, additional, additional_count);
+}
+
+static int
+mdns_goodbye_multicast(int sock, void* buffer, size_t capacity, mdns_record_t answer,
+                        mdns_record_t* authority, size_t authority_count, mdns_record_t* additional,
+                        size_t additional_count) {
+	uint16_t rclass = MDNS_CLASS_IN | MDNS_CACHE_FLUSH;
+	return mdns_answer_multicast_rclass_ttl(sock, buffer, capacity, rclass, answer, authority,
+	                                    authority_count, additional, additional_count, 0);
 }
 
 static mdns_string_t
