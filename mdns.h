@@ -271,7 +271,14 @@ mdns_announce_multicast(int sock, void* buffer, size_t capacity, mdns_record_t a
                         mdns_record_t* authority, size_t authority_count, mdns_record_t* additional,
                         size_t additional_count);
 
-// Parse records functions
+//! Send a variable multicast mDNS announcement. Use this on service end for removing the resource
+//! from the local network. The records must be identical to the according announcement.
+static int
+mdns_goodbye_multicast(int sock, void* buffer, size_t capacity, mdns_record_t answer,
+                       mdns_record_t* authority, size_t authority_count, mdns_record_t* additional,
+                       size_t additional_count);
+
+    // Parse records functions
 
 //! Parse a PTR record, returns the name in the record
 static mdns_string_t

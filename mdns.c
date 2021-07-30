@@ -909,6 +909,23 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 		}
 	}
 
+	// Send a goodbye on end of service
+	{
+		mdns_record_t additional[5] = {0};
+		size_t additional_count = 0;
+		additional[additional_count++] = service.record_srv;
+		if (service.address_ipv4.sin_family == AF_INET)
+			additional[additional_count++] = service.record_a;
+		if (service.address_ipv6.sin6_family == AF_INET6)
+			additional[additional_count++] = service.record_aaaa;
+		additional[additional_count++] = service.txt_record[0];
+		additional[additional_count++] = service.txt_record[1];
+
+		for (int isock = 0; isock < num_sockets; ++isock)
+			mdns_goodbye_multicast(sockets[isock], buffer, capacity, service.record_ptr, 0, 0,
+			                        additional, additional_count);
+	}
+
 	free(buffer);
 	free(service_name_buffer);
 
