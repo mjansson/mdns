@@ -1313,7 +1313,7 @@ mdns_query_answer_unicast(int sock, const void* address, size_t address_size, vo
 	header->authority_rrs = htons(mdns_answer_get_record_count(authority, authority_count));
 	header->additional_rrs = htons(mdns_answer_get_record_count(additional, additional_count));
 
-	mdns_string_table_t string_table = {0};
+	mdns_string_table_t string_table = {{0}, 0, 0};
 	void* data = MDNS_POINTER_OFFSET(buffer, sizeof(struct mdns_header_t));
 
 	// Fill in question
@@ -1360,7 +1360,7 @@ mdns_answer_multicast_rclass_ttl(int sock, void* buffer, size_t capacity, uint16
 	header->authority_rrs = htons(mdns_answer_get_record_count(authority, authority_count));
 	header->additional_rrs = htons(mdns_answer_get_record_count(additional, additional_count));
 
-	mdns_string_table_t string_table = {0};
+	mdns_string_table_t string_table = {{0}, 0, 0};
 	void* data = MDNS_POINTER_OFFSET(buffer, sizeof(struct mdns_header_t));
 
 	// Fill in answer
