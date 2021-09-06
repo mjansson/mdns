@@ -650,7 +650,7 @@ send_dns_sd(void) {
 		printf("Failed to open any client sockets\n");
 		return -1;
 	}
-	printf("Opened %d socket%s for DNS-SD\n", num_sockets, num_sockets ? "s" : "");
+	printf("Opened %d socket%s for DNS-SD\n", num_sockets, num_sockets > 1 ? "s" : "");
 
 	printf("Sending DNS-SD discovery\n");
 	for (int isock = 0; isock < num_sockets; ++isock) {
