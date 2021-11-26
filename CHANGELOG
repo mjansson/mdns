@@ -1,3 +1,8 @@
+1.4.2 - pending
+
+Add mdns_goodbye_multicast function to send end of service announcement
+
+
 1.4.1
 
 Use const pointers in socket open and setup functions.

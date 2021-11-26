@@ -8,6 +8,8 @@ This library is put in the public domain; you can redistribute it and/or modify 
 
 Created by Mattias Jansson ([@maniccoder](https://twitter.com/maniccoder))
 
+Discord server for discussions https://discord.gg/M8BwTQrt6c
+
 ## Features
 
 The library does DNS-SD discovery and service as well as one-shot single record mDNS query and response. There are no memory allocations done by the library, all buffers used must be passed in by the caller. Custom data for use in processing can be passed along using a user data opaque pointer.
@@ -62,7 +64,7 @@ See the test executable implementation for more details on how to handle the par
 
 ### Announce
 
-If you provide a mDNS service listening and answering queries on port 5353 it is encouraged to send announcement on startup of your service (as an unsolicited answer). Use the `mdns_announce_multicast` to announce the records for your service.
+If you provide a mDNS service listening and answering queries on port 5353 it is encouraged to send announcement on startup of your service (as an unsolicited answer). Use the `mdns_announce_multicast` to announce the records for your service at startup, and `mdns_goodbye_multicast` to announce the end of service on termination.
 
 ## Test executable
 The `mdns.c` file contains a test executable implementation using the library to do DNS-SD and mDNS queries. Compile into an executable and run to see command line options for discovery, query and service modes.
