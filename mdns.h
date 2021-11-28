@@ -72,7 +72,7 @@ enum mdns_entry_type {
 	MDNS_ENTRYTYPE_ADDITIONAL = 3
 };
 
-enum mdns_class { MDNS_CLASS_IN = 1 };
+enum mdns_class { MDNS_CLASS_IN = 1, MDNS_CLASS_ANY = 255 };
 
 typedef enum mdns_record_type mdns_record_type_t;
 typedef enum mdns_entry_type mdns_entry_type_t;
@@ -1002,10 +1002,14 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 
 		uint16_t rtype = mdns_ntohs(data++);
 		uint16_t rclass = mdns_ntohs(data++);
+		uint16_t class_without_flushbit = rclass & ~MDNS_CACHE_FLUSH;
 
 		// Make sure we get a question of class IN
-		if ((rclass & 0x7FFF) != MDNS_CLASS_IN)
+		if (!((class_without_flushbit == MDNS_CLASS_IN) ||
+		      (class_without_flushbit == MDNS_CLASS_ANY))) {
 			break;
+		}
+
 		if (dns_sd && flags)
 			continue;
 
