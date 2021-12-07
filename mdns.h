@@ -1411,7 +1411,7 @@ static int
 mdns_announce_multicast(int sock, void* buffer, size_t capacity, mdns_record_t answer,
                         mdns_record_t* authority, size_t authority_count, mdns_record_t* additional,
                         size_t additional_count) {
-	uint16_t rclass = MDNS_CLASS_IN | MDNS_CACHE_FLUSH;
+	uint16_t rclass = MDNS_CLASS_IN /*| MDNS_CACHE_FLUSH*/;
 	return mdns_answer_multicast_rclass(sock, buffer, capacity, rclass, answer, authority,
 	                                    authority_count, additional, additional_count);
 }
@@ -1420,7 +1420,7 @@ static int
 mdns_goodbye_multicast(int sock, void* buffer, size_t capacity, mdns_record_t answer,
                         mdns_record_t* authority, size_t authority_count, mdns_record_t* additional,
                         size_t additional_count) {
-	uint16_t rclass = MDNS_CLASS_IN | MDNS_CACHE_FLUSH;
+	uint16_t rclass = MDNS_CLASS_IN /*| MDNS_CACHE_FLUSH*/;
 	return mdns_answer_multicast_rclass_ttl(sock, buffer, capacity, rclass, answer, authority,
 	                                    authority_count, additional, additional_count, 0);
 }

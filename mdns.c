@@ -711,7 +711,7 @@ send_mdns_query(const char* service, int record) {
 		printf("Failed to open any client sockets\n");
 		return -1;
 	}
-	printf("Opened %d socket%s for mDNS query\n", num_sockets, num_sockets ? "s" : "");
+	printf("Opened %d socket%s for mDNS query\n", num_sockets, num_sockets > 1 ? "s" : "");
 
 	size_t capacity = 2048;
 	void* buffer = malloc(capacity);
@@ -784,7 +784,7 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 		printf("Failed to open any client sockets\n");
 		return -1;
 	}
-	printf("Opened %d socket%s for mDNS service\n", num_sockets, num_sockets ? "s" : "");
+	printf("Opened %d socket%s for mDNS service\n", num_sockets, num_sockets > 1 ? "s" : "");
 
 	size_t service_name_length = strlen(service_name);
 	if (!service_name_length) {
