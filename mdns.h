@@ -317,6 +317,9 @@ mdns_string_skip(const void* buffer, size_t size, size_t* offset);
 static inline size_t
 mdns_string_find(const char* str, size_t length, char c, size_t offset);
 
+//! Compare if two strings are equal. If the strings are equal it returns >0 and the offset variables are
+//! updated to the end of the corresponding strings. If the strings are not equal it returns 0 and 
+//! the offset variables are NOT updated.
 static inline int
 mdns_string_equal(const void* buffer_lhs, size_t size_lhs, size_t* ofs_lhs, const void* buffer_rhs,
                   size_t size_rhs, size_t* ofs_rhs);
@@ -889,13 +892,13 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 
 	int i;
 	for (i = 0; i < questions; ++i) {
-		size_t ofs = MDNS_POINTER_DIFF(data, buffer);
-		size_t verify_ofs = 12;
+		size_t offset = MDNS_POINTER_DIFF(data, buffer);
+		size_t verify_offset = 12;
 		// Verify it's our question, _services._dns-sd._udp.local.
-		if (!mdns_string_equal(buffer, data_size, &ofs, mdns_services_query,
-		                       sizeof(mdns_services_query), &verify_ofs))
+		if (!mdns_string_equal(buffer, data_size, &offset, mdns_services_query,
+		                       sizeof(mdns_services_query), &verify_offset))
 			return 0;
-		data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, ofs);
+		data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, offset);
 
 		uint16_t rtype = mdns_ntohs(data++);
 		uint16_t rclass = mdns_ntohs(data++);
@@ -906,31 +909,33 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 	}
 
 	for (i = 0; i < answer_rrs; ++i) {
-		size_t ofs = MDNS_POINTER_DIFF(data, buffer);
-		size_t verify_ofs = 12;
+		size_t offset = MDNS_POINTER_DIFF(data, buffer);
+		size_t verify_offset = 12;
 		// Verify it's an answer to our question, _services._dns-sd._udp.local.
-		size_t name_offset = ofs;
-		int is_answer = mdns_string_equal(buffer, data_size, &ofs, mdns_services_query,
-		                                  sizeof(mdns_services_query), &verify_ofs);
-		size_t name_length = ofs - name_offset;
-		if ((ofs + 10) > data_size)
+		size_t name_offset = offset;
+		int is_answer = mdns_string_equal(buffer, data_size, &offset, mdns_services_query,
+		                                  sizeof(mdns_services_query), &verify_offset);
+		if (!is_answer && !mdns_string_skip(buffer, data_size, &offset))
+			break;
+		size_t name_length = offset - name_offset;
+		if ((offset + 10) > data_size)
 			return records;
-		data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, ofs);
+		data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, offset);
 
 		uint16_t rtype = mdns_ntohs(data++);
 		uint16_t rclass = mdns_ntohs(data++);
 		uint32_t ttl = mdns_ntohl(data);
 		data += 2;
 		uint16_t length = mdns_ntohs(data++);
-		if (length > (data_size - ofs))
+		if (length > (data_size - offset))
 			return 0;
 
 		if (is_answer) {
 			++records;
-			ofs = MDNS_POINTER_DIFF(data, buffer);
+			offset = MDNS_POINTER_DIFF(data, buffer);
 			if (callback &&
 			    callback(sock, saddr, addrlen, MDNS_ENTRYTYPE_ANSWER, query_id, rtype, rclass, ttl,
-			             buffer, data_size, name_offset, name_length, ofs, length, user_data))
+			             buffer, data_size, name_offset, name_length, offset, length, user_data))
 				return records;
 		}
 		data = (const uint16_t*)MDNS_POINTER_OFFSET_CONST(data, length);
@@ -987,15 +992,13 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 	for (int iquestion = 0; iquestion < questions; ++iquestion) {
 		size_t question_offset = MDNS_POINTER_DIFF(data, buffer);
 		size_t offset = question_offset;
-		size_t verify_ofs = 12;
+		size_t verify_offset = 12;
 		int dns_sd = 0;
 		if (mdns_string_equal(buffer, data_size, &offset, mdns_services_query,
-		                      sizeof(mdns_services_query), &verify_ofs)) {
+		                      sizeof(mdns_services_query), &verify_offset)) {
 			dns_sd = 1;
-		} else {
-			offset = question_offset;
-			if (!mdns_string_skip(buffer, data_size, &offset))
-				break;
+		} else if (!mdns_string_skip(buffer, data_size, &offset)) {
+			break;
 		}
 		size_t length = offset - question_offset;
 		data = (const uint16_t*)MDNS_POINTER_OFFSET_CONST(buffer, offset);
@@ -1106,10 +1109,10 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 	// Skip questions part
 	int i;
 	for (i = 0; i < questions; ++i) {
-		size_t ofs = MDNS_POINTER_DIFF(data, buffer);
-		if (!mdns_string_skip(buffer, data_size, &ofs))
+		size_t offset = MDNS_POINTER_DIFF(data, buffer);
+		if (!mdns_string_skip(buffer, data_size, &offset))
 			return 0;
-		data = (const uint16_t*)MDNS_POINTER_OFFSET_CONST(buffer, ofs);
+		data = (const uint16_t*)MDNS_POINTER_OFFSET_CONST(buffer, offset);
 		/* Record type and class not used, skip
 		uint16_t rtype = mdns_ntohs(data++);
 		uint16_t rclass = mdns_ntohs(data++);*/
