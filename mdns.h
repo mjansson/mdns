@@ -829,7 +829,7 @@ mdns_multicast_send(int sock, const void* buffer, size_t size) {
 	return 0;
 }
 
-static inline const uint8_t mdns_services_query[] = {
+static const uint8_t mdns_services_query[] = {
     // Query ID
     0x00, 0x00,
     // Flags
