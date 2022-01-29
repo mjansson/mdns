@@ -703,7 +703,7 @@ send_dns_sd(void) {
 
 // Send a mDNS query
 static int
-send_mdns_query(const char* service, int record) {
+send_mdns_query(mdns_query_t* query, size_t count) {
 	int sockets[32];
 	int query_id[32];
 	int num_sockets = open_client_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]), 0);
@@ -716,22 +716,24 @@ send_mdns_query(const char* service, int record) {
 	size_t capacity = 2048;
 	void* buffer = malloc(capacity);
 	void* user_data = 0;
-	size_t records;
 
-	const char* record_name = "PTR";
-	if (record == MDNS_RECORDTYPE_SRV)
-		record_name = "SRV";
-	else if (record == MDNS_RECORDTYPE_A)
-		record_name = "A";
-	else if (record == MDNS_RECORDTYPE_AAAA)
-		record_name = "AAAA";
-	else
-		record = MDNS_RECORDTYPE_PTR;
-
-	printf("Sending mDNS query: %s %s\n", service, record_name);
+	printf("Sending mDNS query");
+	for (size_t iq = 0; iq < count; ++iq) {
+		const char* record_name = "PTR";
+		if (query[iq].type == MDNS_RECORDTYPE_SRV)
+			record_name = "SRV";
+		else if (query[iq].type == MDNS_RECORDTYPE_A)
+			record_name = "A";
+		else if (query[iq].type == MDNS_RECORDTYPE_AAAA)
+			record_name = "AAAA";
+		else
+			query[iq].type = MDNS_RECORDTYPE_PTR;
+		printf(" : %s %s", query[iq].name, record_name);
+	}
+	printf("\n");
 	for (int isock = 0; isock < num_sockets; ++isock) {
 		query_id[isock] =
-		    mdns_query_send(sockets[isock], record, service, strlen(service), buffer, capacity, 0);
+		    mdns_multiquery_send(sockets[isock], query, count, buffer, capacity, 0);
 		if (query_id[isock] < 0)
 			printf("Failed to send mDNS query: %s\n", strerror(errno));
 	}
@@ -739,6 +741,7 @@ send_mdns_query(const char* service, int record) {
 	// This is a simple implementation that loops for 5 seconds or as long as we get replies
 	int res;
 	printf("Reading mDNS query replies\n");
+	int records = 0;
 	do {
 		struct timeval timeout;
 		timeout.tv_sec = 10;
@@ -753,18 +756,21 @@ send_mdns_query(const char* service, int record) {
 			FD_SET(sockets[isock], &readfs);
 		}
 
-		records = 0;
 		res = select(nfds, &readfs, 0, 0, &timeout);
 		if (res > 0) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
 				if (FD_ISSET(sockets[isock], &readfs)) {
-					records += mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
-					                           user_data, query_id[isock]);
+					int rec = mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
+					                          user_data, query_id[isock]);
+					if (rec > 0)
+						records += rec;
 				}
 				FD_SET(sockets[isock], &readfs);
 			}
 		}
 	} while (res > 0);
+
+	printf("Read %d records\n", records);
 
 	free(buffer);
 
@@ -1018,7 +1024,8 @@ main(int argc, const char* const* argv) {
 	int mode = 0;
 	const char* service = "_test-mdns._tcp.local.";
 	const char* hostname = "dummy-host";
-	int query_record = MDNS_RECORDTYPE_PTR;
+	mdns_query_t query[16];
+	size_t query_count = 0;
 	int service_port = 42424;
 
 #ifdef _WIN32
@@ -1048,21 +1055,33 @@ main(int argc, const char* const* argv) {
 		if (strcmp(argv[iarg], "--discovery") == 0) {
 			mode = 0;
 		} else if (strcmp(argv[iarg], "--query") == 0) {
+			// Each query is either a service name, or a pair of record type and a service name
+			// For example:
+			//  mdns --query _foo._tcp.local.
+			//  mdns --query SRV myhost._foo._tcp.local.
+			//  mdns --query A myhost._tcp.local. _service._tcp.local.
 			mode = 1;
 			++iarg;
-			if (iarg < argc)
-				service = argv[iarg++];
-			if (iarg < argc) {
-				const char* record_name = service;
-				service = argv[iarg++];
-				if (strcmp(record_name, "PTR") == 0)
-					query_record = MDNS_RECORDTYPE_PTR;
-				else if (strcmp(record_name, "SRV") == 0)
-					query_record = MDNS_RECORDTYPE_SRV;
-				else if (strcmp(record_name, "A") == 0)
-					query_record = MDNS_RECORDTYPE_A;
-				else if (strcmp(record_name, "AAAA") == 0)
-					query_record = MDNS_RECORDTYPE_AAAA;
+			while ((iarg < argc) && (query_count < 16)) {
+				query[query_count].name = argv[iarg++];
+				query[query_count].type = MDNS_RECORDTYPE_PTR;
+				if (iarg < argc) {
+					mdns_record_type_t record_type = 0;
+					if (strcmp(query[query_count].name, "PTR") == 0)
+						record_type = MDNS_RECORDTYPE_PTR;
+					else if (strcmp(query[query_count].name, "SRV") == 0)
+						record_type = MDNS_RECORDTYPE_SRV;
+					else if (strcmp(query[query_count].name, "A") == 0)
+						record_type = MDNS_RECORDTYPE_A;
+					else if (strcmp(query[query_count].name, "AAAA") == 0)
+						record_type = MDNS_RECORDTYPE_AAAA;
+					if (record_type != 0) {
+						query[query_count].type = record_type;
+						query[query_count].name = argv[iarg++];
+					}
+				}
+				query[query_count].length = strlen(query[query_count].name);
+				++query_count;
 			}
 		} else if (strcmp(argv[iarg], "--service") == 0) {
 			mode = 2;
@@ -1087,7 +1106,7 @@ main(int argc, const char* const* argv) {
 	if (mode == 0)
 		ret = send_dns_sd();
 	else if (mode == 1)
-		ret = send_mdns_query(service, query_record);
+		ret = send_mdns_query(query, query_count);
 	else if (mode == 2)
 		ret = service_mdns(hostname, service, service_port);
 #endif

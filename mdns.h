@@ -94,6 +94,7 @@ typedef struct mdns_record_ptr_t mdns_record_ptr_t;
 typedef struct mdns_record_a_t mdns_record_a_t;
 typedef struct mdns_record_aaaa_t mdns_record_aaaa_t;
 typedef struct mdns_record_txt_t mdns_record_txt_t;
+typedef struct mdns_query_t mdns_query_t;
 
 #ifdef _WIN32
 typedef int mdns_size_t;
@@ -165,6 +166,12 @@ struct mdns_header_t {
 	uint16_t additional_rrs;
 };
 
+struct mdns_query_t {
+	mdns_record_type_t type;
+	const char* name;
+	size_t length;
+};
+
 // mDNS/DNS-SD public API
 
 //! Open and setup a IPv4 socket for mDNS/DNS-SD. To bind the socket to a specific interface, pass
@@ -232,6 +239,18 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 static inline int
 mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t length, void* buffer,
                 size_t capacity, uint16_t query_id);
+
+//! Send a multicast mDNS query on the given socket for the given service names. The supplied buffer
+//! will be used to build the query packet and must be 32 bit aligned. The query ID can be set to
+//! non-zero to filter responses, however the RFC states that the query ID SHOULD be set to 0 for
+//! multicast queries. Each additional service name query consists of a triplet - a record type
+//! (mdns_record_type_t), a name string pointer (const char*) and a name length (size_t). The list
+//! of variable arguments should be terminated with a record type of 0. The query will request a
+//! unicast response if the socket is bound to an ephemeral port, or a multicast response if the
+//! socket is bound to mDNS port 5353. Returns the used query ID, or <0 if error.
+static inline int
+mdns_multiquery_send(int sock, const mdns_query_t* query, size_t count, void* buffer,
+                     size_t capacity, uint16_t query_id);
 
 //! Receive unicast responses to a mDNS query sent with mdns_discovery_recv, optionally filtering
 //! out any responses not matching the given query ID. Set the query ID to 0 to parse all responses,
@@ -1029,7 +1048,17 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 static inline int
 mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t length, void* buffer,
                 size_t capacity, uint16_t query_id) {
-	if (capacity < (17 + length))
+	mdns_query_t query;
+	query.type = type;
+	query.name = name;
+	query.length = length;
+	return mdns_multiquery_send(sock, &query, 1, buffer, capacity, query_id);
+}
+
+static inline int
+mdns_multiquery_send(int sock, const mdns_query_t* query, size_t count, void* buffer, size_t capacity,
+                     uint16_t query_id) {
+	if (!count || (capacity < (sizeof(struct mdns_header_t) + (6 * count))))
 		return -1;
 
 	// Ask for a unicast response since it's a one-shot query
@@ -1049,25 +1078,27 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 
 	struct mdns_header_t* header = (struct mdns_header_t*)buffer;
 	// Query ID
-	header->query_id = htons(query_id);
+	header->query_id = htons((unsigned short)query_id);
 	// Flags
 	header->flags = 0;
 	// Questions
-	header->questions = htons(1);
+	header->questions = htons((unsigned short)count);
 	// No answer, authority or additional RRs
 	header->answer_rrs = 0;
 	header->authority_rrs = 0;
 	header->additional_rrs = 0;
-	// Fill in question
-	// Name string
+	// Fill in questions
 	void* data = MDNS_POINTER_OFFSET(buffer, sizeof(struct mdns_header_t));
-	data = mdns_string_make(buffer, capacity, data, name, length, 0);
-	if (!data)
-		return -1;
-	// Record type
-	data = mdns_htons(data, type);
-	//! Optional unicast response based on local port, class IN
-	data = mdns_htons(data, rclass);
+	for (size_t iq = 0; iq < count; ++iq) {
+		// Name string
+		data = mdns_string_make(buffer, capacity, data, query[iq].name, query[iq].length, 0);
+		if (!data)
+			return -1;
+		// Record type
+		data = mdns_htons(data, query[iq].type);
+		//! Optional unicast response based on local port, class IN
+		data = mdns_htons(data, rclass);
+	}
 
 	size_t tosend = MDNS_POINTER_DIFF(data, buffer);
 	if (mdns_multicast_send(sock, buffer, (size_t)tosend))

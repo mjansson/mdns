@@ -50,6 +50,8 @@ To read query responses use `mdns_query_recv`. All records received since last c
 
 Note that a socket opened for one-shot queries from an emphemeral port will not recieve any unsolicited answers (announces) as these are sent as a multicast on port 5353.
 
+To send multiple queries in the same packet use `mdns_multiquery_send` which takes an array and count of service names and record types to query for.
+
 ### Service
 
 To listen for incoming DNS-SD requests and mDNS queries the socket can be opened/setup on the default interface by passing 0 as socket address in the call to the socket open/setup functions (the socket will receive data from all network interfaces). Then call `mdns_socket_listen` either on notification of incoming data, or by setting blocking mode and calling `mdns_socket_listen` to block until data is available and parsed.
