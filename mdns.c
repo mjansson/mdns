@@ -519,6 +519,9 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 				}
 			} else if (unicast->Address.lpSockaddr->sa_family == AF_INET6) {
 				struct sockaddr_in6* saddr = (struct sockaddr_in6*)unicast->Address.lpSockaddr;
+				// Ignore link-local addresses
+				if (saddr->sin6_scope_id)
+					continue;
 				static const unsigned char localhost[] = {0, 0, 0, 0, 0, 0, 0, 0,
 				                                          0, 0, 0, 0, 0, 0, 0, 1};
 				static const unsigned char localhost_mapped[] = {0, 0, 0,    0,    0,    0, 0, 0,
@@ -603,6 +606,9 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 			}
 		} else if (ifa->ifa_addr->sa_family == AF_INET6) {
 			struct sockaddr_in6* saddr = (struct sockaddr_in6*)ifa->ifa_addr;
+			// Ignore link-local addresses
+			if (saddr->sin6_scope_id)
+				continue;
 			static const unsigned char localhost[] = {0, 0, 0, 0, 0, 0, 0, 0,
 			                                          0, 0, 0, 0, 0, 0, 0, 1};
 			static const unsigned char localhost_mapped[] = {0, 0, 0,    0,    0,    0, 0, 0,
