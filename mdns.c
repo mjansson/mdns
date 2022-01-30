@@ -14,6 +14,7 @@
 #else
 #include <netdb.h>
 #include <ifaddrs.h>
+#include <net/if.h>
 #endif
 
 // Alias some things to simulate recieving data to fuzz library
@@ -198,6 +199,8 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 		record_name = "A";
 	else if (rtype == MDNS_RECORDTYPE_AAAA)
 		record_name = "AAAA";
+	else if (rtype == MDNS_RECORDTYPE_TXT)
+		record_name = "TXT";
 	else if (rtype == MDNS_RECORDTYPE_ANY)
 		record_name = "ANY";
 	else
@@ -401,6 +404,47 @@ service_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_ent
 	return 0;
 }
 
+// Callback handling questions and answers dump
+static int
+dump_callback(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry_type_t entry,
+              uint16_t query_id, uint16_t rtype, uint16_t rclass, uint32_t ttl, const void* data,
+              size_t size, size_t name_offset, size_t name_length, size_t record_offset,
+              size_t record_length, void* user_data) {
+	mdns_string_t fromaddrstr = ip_address_to_string(addrbuffer, sizeof(addrbuffer), from, addrlen);
+
+	size_t offset = name_offset;
+	mdns_string_t name = mdns_string_extract(data, size, &offset, namebuffer, sizeof(namebuffer));
+
+	const char* record_name = 0;
+	if (rtype == MDNS_RECORDTYPE_PTR)
+		record_name = "PTR";
+	else if (rtype == MDNS_RECORDTYPE_SRV)
+		record_name = "SRV";
+	else if (rtype == MDNS_RECORDTYPE_A)
+		record_name = "A";
+	else if (rtype == MDNS_RECORDTYPE_AAAA)
+		record_name = "AAAA";
+	else if (rtype == MDNS_RECORDTYPE_TXT)
+		record_name = "TXT";
+	else if (rtype == MDNS_RECORDTYPE_ANY)
+		record_name = "ANY";
+	else
+		record_name = "<UNKNOWN>";
+
+	const char* entry_type = "Question";
+	if (entry == MDNS_ENTRYTYPE_ANSWER)
+		entry_type = "Answer";
+	else if (entry == MDNS_ENTRYTYPE_AUTHORITY)
+		entry_type = "Authority";
+	else if (entry == MDNS_ENTRYTYPE_ADDITIONAL)
+		entry_type = "Additional";
+
+	printf("%.*s: %s %s %.*s rclass 0x%x ttl %u\n", MDNS_STRING_FORMAT(fromaddrstr), entry_type,
+	       record_name, MDNS_STRING_FORMAT(name), (unsigned int)rclass, ttl);
+
+	return 0;
+}
+
 // Open sockets for sending one-shot multicast queries from an ephemeral port
 static int
 open_client_sockets(int* sockets, int max_sockets, int port) {
@@ -524,6 +568,10 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 	int first_ipv6 = 1;
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr)
+			continue;
+		if (!(ifa->ifa_flags & IFF_UP) || !(ifa->ifa_flags & IFF_MULTICAST))
+			continue;
+		if ((ifa->ifa_flags & IFF_LOOPBACK) || (ifa->ifa_flags & IFF_POINTOPOINT))
 			continue;
 
 		if (ifa->ifa_addr->sa_family == AF_INET) {
@@ -843,7 +891,9 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 	// "<hostname>.<_service-name>._tcp.local."
 	service.record_ptr = (mdns_record_t){.name = service.service,
 	                                     .type = MDNS_RECORDTYPE_PTR,
-	                                     .data.ptr.name = service.service_instance};
+	                                     .data.ptr.name = service.service_instance,
+	                                     .rclass = 0,
+	                                     .ttl = 0};
 
 	// SRV record mapping "<hostname>.<_service-name>._tcp.local." to
 	// "<hostname>.local." with port. Set weight & priority to 0.
@@ -852,30 +902,41 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 	                                     .data.srv.name = service.hostname_qualified,
 	                                     .data.srv.port = service.port,
 	                                     .data.srv.priority = 0,
-	                                     .data.srv.weight = 0};
+	                                     .data.srv.weight = 0,
+	                                     .rclass = 0,
+	                                     .ttl = 0};
 
 	// A/AAAA records mapping "<hostname>.local." to IPv4/IPv6 addresses
 	service.record_a = (mdns_record_t){.name = service.hostname_qualified,
 	                                   .type = MDNS_RECORDTYPE_A,
-	                                   .data.a.addr = service.address_ipv4};
+	                                   .data.a.addr = service.address_ipv4,
+	                                   .rclass = 0,
+	                                   .ttl = 0};
 
 	service.record_aaaa = (mdns_record_t){.name = service.hostname_qualified,
 	                                      .type = MDNS_RECORDTYPE_AAAA,
-	                                      .data.aaaa.addr = service.address_ipv6};
+	                                      .data.aaaa.addr = service.address_ipv6,
+	                                      .rclass = 0,
+	                                      .ttl = 0};
 
 	// Add two test TXT records for our service instance name, will be coalesced into
 	// one record with both key-value pair strings by the library
 	service.txt_record[0] = (mdns_record_t){.name = service.service_instance,
 	                                        .type = MDNS_RECORDTYPE_TXT,
 	                                        .data.txt.key = {MDNS_STRING_CONST("test")},
-	                                        .data.txt.value = {MDNS_STRING_CONST("1")}};
+	                                        .data.txt.value = {MDNS_STRING_CONST("1")},
+	                                        .rclass = 0,
+	                                        .ttl = 0};
 	service.txt_record[1] = (mdns_record_t){.name = service.service_instance,
 	                                        .type = MDNS_RECORDTYPE_TXT,
 	                                        .data.txt.key = {MDNS_STRING_CONST("other")},
-	                                        .data.txt.value = {MDNS_STRING_CONST("value")}};
+	                                        .data.txt.value = {MDNS_STRING_CONST("value")},
+	                                        .rclass = 0,
+	                                        .ttl = 0};
 
 	// Send an announcement on startup of service
 	{
+		printf("Sending announce\n");
 		mdns_record_t additional[5] = {0};
 		size_t additional_count = 0;
 		additional[additional_count++] = service.record_srv;
@@ -917,6 +978,7 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 
 	// Send a goodbye on end of service
 	{
+		printf("Sending goodbye\n");
 		mdns_record_t additional[5] = {0};
 		size_t additional_count = 0;
 		additional[additional_count++] = service.record_srv;
@@ -934,6 +996,53 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 
 	free(buffer);
 	free(service_name_buffer);
+
+	for (int isock = 0; isock < num_sockets; ++isock)
+		mdns_socket_close(sockets[isock]);
+	printf("Closed socket%s\n", num_sockets ? "s" : "");
+
+	return 0;
+}
+
+
+// Dump all incoming mDNS queries and answers
+static int
+dump_mdns(void) {
+	int sockets[32];
+	int num_sockets = open_service_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]));
+	if (num_sockets <= 0) {
+		printf("Failed to open any client sockets\n");
+		return -1;
+	}
+	printf("Opened %d socket%s for mDNS dump\n", num_sockets, num_sockets ? "s" : "");
+
+	size_t capacity = 2048;
+	void* buffer = malloc(capacity);
+
+	// This is a crude implementation that checks for incoming queries and answers
+	while (1) {
+		int nfds = 0;
+		fd_set readfs;
+		FD_ZERO(&readfs);
+		for (int isock = 0; isock < num_sockets; ++isock) {
+			if (sockets[isock] >= nfds)
+				nfds = sockets[isock] + 1;
+			FD_SET(sockets[isock], &readfs);
+		}
+
+		if (select(nfds, &readfs, 0, 0, 0) >= 0) {
+			for (int isock = 0; isock < num_sockets; ++isock) {
+				if (FD_ISSET(sockets[isock], &readfs)) {
+					mdns_socket_listen(sockets[isock], buffer, capacity, dump_callback, 0);
+				}
+				FD_SET(sockets[isock], &readfs);
+			}
+		} else {
+			break;
+		}
+	}
+
+	free(buffer);
 
 	for (int isock = 0; isock < num_sockets; ++isock)
 		mdns_socket_close(sockets[isock]);
@@ -1088,6 +1197,8 @@ main(int argc, const char* const* argv) {
 			++iarg;
 			if (iarg < argc)
 				service = argv[iarg];
+		} else if (strcmp(argv[iarg], "--dump") == 0) {
+			mode = 3;
 		} else if (strcmp(argv[iarg], "--hostname") == 0) {
 			++iarg;
 			if (iarg < argc)
@@ -1109,6 +1220,8 @@ main(int argc, const char* const* argv) {
 		ret = send_mdns_query(query, query_count);
 	else if (mode == 2)
 		ret = service_mdns(hostname, service, service_port);
+	else if (mode == 3)
+		ret = dump_mdns();
 #endif
 
 #ifdef _WIN32

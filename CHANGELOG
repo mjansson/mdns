@@ -2,6 +2,16 @@
 
 Add mdns_goodbye_multicast function to send end of service announcement
 
+Fix the rclass and TTL for announce and goodbye to avoid flush flag on shared records
+
+Fixed an issue with parsing multiple answer records in discovery
+
+All authority and additional records are now sent to service callback function
+
+Various code cleanups, making all functions inline declared.
+
+Added a dump mode to the example application for listing all mDNS traffic on port 5353
+
 
 1.4.1
 
