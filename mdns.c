@@ -1146,14 +1146,14 @@ fuzz_mdns(void) {
 #endif
 
 #ifdef _WIN32
-BOOL consoleHandler(DWORD signal) {
+BOOL console_handler(DWORD signal) {
 	if (signal == CTRL_C_EVENT) {
 		running = 0;
 	}
 	return TRUE;
 }
 #else
-void signalHandler(int sig) {
+void signal_handler(int signal) {
 	running = 0;
 }
 #endif
@@ -1181,14 +1181,14 @@ main(int argc, const char* const* argv) {
 	if (GetComputerNameA(hostname_buffer, &hostname_size))
 		hostname = hostname_buffer;
 
-	SetConsoleCtrlHandler(consoleHandler, TRUE);
+	SetConsoleCtrlHandler(console_handler, TRUE);
 #else
 
 	char hostname_buffer[256];
 	size_t hostname_size = sizeof(hostname_buffer);
 	if (gethostname(hostname_buffer, hostname_size) == 0)
 		hostname = hostname_buffer;
-	signal(SIGINT, signalHandler);
+	signal(SIGINT, signal_handler);
 #endif
 
 	for (int iarg = 0; iarg < argc; ++iarg) {
