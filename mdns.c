@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include <errno.h>
+#include <signal.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -40,6 +41,8 @@ static struct sockaddr_in6 service_address_ipv6;
 
 static int has_ipv4;
 static int has_ipv6;
+
+volatile sig_atomic_t running = 1;
 
 // Data for our service including the mDNS records
 typedef struct {
@@ -959,7 +962,7 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 	}
 
 	// This is a crude implementation that checks for incoming queries
-	while (1) {
+	while (running) {
 		int nfds = 0;
 		fd_set readfs;
 		FD_ZERO(&readfs);
@@ -969,7 +972,11 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 			FD_SET(sockets[isock], &readfs);
 		}
 
-		if (select(nfds, &readfs, 0, 0, 0) >= 0) {
+		struct timeval timeout;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 100000;
+
+		if (select(nfds, &readfs, 0, 0, &timeout) >= 0) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
 				if (FD_ISSET(sockets[isock], &readfs)) {
 					mdns_socket_listen(sockets[isock], buffer, capacity, service_callback,
@@ -1026,7 +1033,7 @@ dump_mdns(void) {
 	void* buffer = malloc(capacity);
 
 	// This is a crude implementation that checks for incoming queries and answers
-	while (1) {
+	while (running) {
 		int nfds = 0;
 		fd_set readfs;
 		FD_ZERO(&readfs);
@@ -1036,7 +1043,11 @@ dump_mdns(void) {
 			FD_SET(sockets[isock], &readfs);
 		}
 
-		if (select(nfds, &readfs, 0, 0, 0) >= 0) {
+		struct timeval timeout;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 100000;
+
+		if (select(nfds, &readfs, 0, 0, &timeout) >= 0) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
 				if (FD_ISSET(sockets[isock], &readfs)) {
 					mdns_socket_listen(sockets[isock], buffer, capacity, dump_callback, 0);
@@ -1134,6 +1145,19 @@ fuzz_mdns(void) {
 
 #endif
 
+#ifdef _WIN32
+BOOL console_handler(DWORD signal) {
+	if (signal == CTRL_C_EVENT) {
+		running = 0;
+	}
+	return TRUE;
+}
+#else
+void signal_handler(int signal) {
+	running = 0;
+}
+#endif
+
 int
 main(int argc, const char* const* argv) {
 	int mode = 0;
@@ -1157,13 +1181,14 @@ main(int argc, const char* const* argv) {
 	if (GetComputerNameA(hostname_buffer, &hostname_size))
 		hostname = hostname_buffer;
 
+	SetConsoleCtrlHandler(console_handler, TRUE);
 #else
 
 	char hostname_buffer[256];
 	size_t hostname_size = sizeof(hostname_buffer);
 	if (gethostname(hostname_buffer, hostname_size) == 0)
 		hostname = hostname_buffer;
-
+	signal(SIGINT, signal_handler);
 #endif
 
 	for (int iarg = 0; iarg < argc; ++iarg) {
