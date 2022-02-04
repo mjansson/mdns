@@ -1,4 +1,4 @@
-1.4.2 - pending
+1.4.2
 
 Add mdns_goodbye_multicast function to send end of service announcement
 
