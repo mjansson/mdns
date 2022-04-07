@@ -61,15 +61,17 @@ typedef struct {
 } service_t;
 
 static mdns_string_t
-ipv4_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in* addr,
-                       size_t addrlen) {
+_ip_address_to_string(char* buffer, size_t capacity, const struct sockaddr* addr, size_t addrlen,
+                      int is_ipv6) {
 	char host[NI_MAXHOST] = {0};
 	char service[NI_MAXSERV] = {0};
-	int ret = getnameinfo((const struct sockaddr*)addr, (socklen_t)addrlen, host, NI_MAXHOST,
+	int ret = getnameinfo(addr, (socklen_t)addrlen, host, NI_MAXHOST,
 	                      service, NI_MAXSERV, NI_NUMERICSERV | NI_NUMERICHOST);
 	int len = 0;
 	if (ret == 0) {
-		if (addr->sin_port != 0)
+		if (is_ipv6 && ((struct sockaddr_in6 *)addr)->sin6_port != 0)
+			len = snprintf(buffer, capacity, "[%s]:%s", host, service);
+		else if (!is_ipv6 && ((struct sockaddr_in *)addr)->sin_port != 0)
 			len = snprintf(buffer, capacity, "%s:%s", host, service);
 		else
 			len = snprintf(buffer, capacity, "%s", host);
@@ -83,32 +85,20 @@ ipv4_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in* 
 }
 
 static mdns_string_t
-ipv6_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in6* addr,
-                       size_t addrlen) {
-	char host[NI_MAXHOST] = {0};
-	char service[NI_MAXSERV] = {0};
-	int ret = getnameinfo((const struct sockaddr*)addr, (socklen_t)addrlen, host, NI_MAXHOST,
-	                      service, NI_MAXSERV, NI_NUMERICSERV | NI_NUMERICHOST);
-	int len = 0;
-	if (ret == 0) {
-		if (addr->sin6_port != 0)
-			len = snprintf(buffer, capacity, "[%s]:%s", host, service);
-		else
-			len = snprintf(buffer, capacity, "%s", host);
-	}
-	if (len >= (int)capacity)
-		len = (int)capacity - 1;
-	mdns_string_t str;
-	str.str = buffer;
-	str.length = len;
-	return str;
+ip_address_to_string(char* buffer, size_t capacity, const struct sockaddr* addr, size_t addrlen) {
+        return _ip_address_to_string(buffer, capacity, addr, addrlen, addr->sa_family == AF_INET6);
 }
 
 static mdns_string_t
-ip_address_to_string(char* buffer, size_t capacity, const struct sockaddr* addr, size_t addrlen) {
-	if (addr->sa_family == AF_INET6)
-		return ipv6_address_to_string(buffer, capacity, (const struct sockaddr_in6*)addr, addrlen);
-	return ipv4_address_to_string(buffer, capacity, (const struct sockaddr_in*)addr, addrlen);
+ipv6_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in6* addr,
+                       size_t addrlen) {
+	return _ip_address_to_string(buffer, capacity, (struct sockaddr *)addr, addrlen, 1);
+}
+
+static mdns_string_t
+ipv4_address_to_string(char* buffer, size_t capacity, const struct sockaddr_in* addr,
+                       size_t addrlen) {
+	return _ip_address_to_string(buffer, capacity, (struct sockaddr *)addr, addrlen, 0);
 }
 
 // Callback handling parsing answers to queries sent
