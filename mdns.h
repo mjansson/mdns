@@ -1149,9 +1149,6 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 	if ((only_query_id > 0) && (query_id != only_query_id))
 		return 0;  // Not a reply to the wanted one-shot query
 
-	if (questions > 1)
-		return 0;
-
 	// Skip questions part
 	int i;
 	for (i = 0; i < questions; ++i) {
