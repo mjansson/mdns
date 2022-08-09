@@ -1575,13 +1575,18 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 		size_t separator = sublength;
 		for (size_t c = 0; c < sublength; ++c) {
 			// DNS-SD TXT record keys MUST be printable US-ASCII, [0x20, 0x7E]
-			if ((strdata[c] < 0x20) || (strdata[c] > 0x7E))
+			if ((strdata[c] < 0x20) || (strdata[c] > 0x7E)) {
+				separator = 0;
 				break;
+			}
 			if (strdata[c] == '=') {
 				separator = c;
 				break;
 			}
 		}
+
+		if (!separator)
+			continue;
 
 		if (separator < sublength) {
 			records[parsed].key.str = strdata;
