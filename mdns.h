@@ -1596,6 +1596,8 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 		} else {
 			records[parsed].key.str = strdata;
 			records[parsed].key.length = sublength;
+			records[parsed].value.str = 0;
+			records[parsed].value.length = 0;
 		}
 
 		++parsed;
