@@ -1573,7 +1573,7 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 		offset += sublength + 1;
 
 		size_t separator = sublength;
-		for (size_t c = 0; c < sublength; ++c) {
+		for (size_t c = 0; c < sublength && ((strdata + c) < (char *)MDNS_POINTER_OFFSET(buffer, end)); ++c) {
 			// DNS-SD TXT record keys MUST be printable US-ASCII, [0x20, 0x7E]
 			if ((strdata[c] < 0x20) || (strdata[c] > 0x7E)) {
 				separator = 0;
