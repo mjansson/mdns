@@ -1569,6 +1569,9 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
 		strdata = (const char*)MDNS_POINTER_OFFSET(buffer, offset);
 		size_t sublength = *(const unsigned char*)strdata;
 
+		if (sublength >= (end - offset))
+			break;
+
 		++strdata;
 		offset += sublength + 1;
 
