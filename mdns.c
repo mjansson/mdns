@@ -817,8 +817,8 @@ send_mdns_query(mdns_query_t* query, size_t count) {
 		if (res > 0) {
 			for (int isock = 0; isock < num_sockets; ++isock) {
 				if (FD_ISSET(sockets[isock], &readfs)) {
-					int rec = mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
-					                          user_data, query_id[isock]);
+					size_t rec = mdns_query_recv(sockets[isock], buffer, capacity, query_callback,
+					                             user_data, query_id[isock]);
 					if (rec > 0)
 						records += rec;
 				}
