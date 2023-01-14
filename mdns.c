@@ -16,6 +16,7 @@
 #include <netdb.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <sys/time.h>
 #endif
 
 // Alias some things to simulate recieving data to fuzz library
