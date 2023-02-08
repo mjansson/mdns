@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(mdns VERSION 1.2.0)
+project(mdns VERSION 1.2.0 LANGUAGES C)
 
 option(MDNS_BUILD_EXAMPLE "build example" ON)
 
@@ -19,6 +19,7 @@ if(WIN32)
   target_link_libraries(${PROJECT_NAME} INTERFACE iphlpapi ws2_32)
 endif()
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
+target_compile_features(${PROJECT_NAME} INTERFACE c_std_99)
 
 # ##############################################################################
 # example
