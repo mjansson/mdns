@@ -1,6 +1,20 @@
 cmake_minimum_required(VERSION 3.0)
 project(mdns VERSION 1.4.2 LANGUAGES C)
 
+
+set(CMAKE_C_COMPILER    /usr/bin/arm-linux-gnueabihf-gcc)
+set(CMAKE_CXX_COMPILER  /usr/bin/arm-linux-gnueabihf-g++)
+set(CMAKE_C_FLAGS       "${CMAKE_C_FLAGS} -march=armv7-a -marm -mfpu=neon -mfloat-abi=hard")
+set(CMAKE_CXX_FLAGS     "${CMAKE_CXX_FLAGS} -march=armv7-a -marm -mfpu=neon -mfloat-abi=hard -W -Wall -Wextra -std=c++11")
+
+set(CMAKE_SYSROOT                   /home/hmedev/sdk-linux/linux-devkit/sysroots/armv7ahf-neon-linux-gnueabi)
+set(CMAKE_CXX_STANDARD              17 CACHE STRING "C++ standard required for build")
+set(CMAKE_CXX_EXTENSIONS            OFF CACHE BOOL "enable/disable compiler specific extensions")
+set(CMAKE_CXX_STANDARD_REQUIRED     ON CACHE BOOL "is C++ stndard a requirement")
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+set(TI_IPC_3_50_03_04   /home/hmedev/ti/ipc_3_50_03_04)
+
 option(MDNS_BUILD_EXAMPLE "build example" ON)
 
 # Set the output of the libraries and executables.

@@ -571,7 +571,6 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 	if (getifaddrs(&ifaddr) < 0)
 		printf("Unable to get interface addresses\n");
 
-	int first_ipv4 = 1;
 	int first_ipv6 = 1;
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr)
@@ -585,11 +584,8 @@ open_client_sockets(int* sockets, int max_sockets, int port) {
 			struct sockaddr_in* saddr = (struct sockaddr_in*)ifa->ifa_addr;
 			if (saddr->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
 				int log_addr = 0;
-				if (first_ipv4) {
-					service_address_ipv4 = *saddr;
-					first_ipv4 = 0;
-					log_addr = 1;
-				}
+				service_address_ipv4 = *saddr;
+				log_addr = 1;
 				has_ipv4 = 1;
 				if (num_sockets < max_sockets) {
 					saddr->sin_port = htons(port);
