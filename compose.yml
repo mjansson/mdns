@@ -1,0 +1,10 @@
+version: "3.8"
+
+services:
+  mdns-test:
+    image: registry.gitlab.com/clearcom/product/genesis/tools/ivcoreserver-builder/ivcoreserver-builder:1.2
+    container_name: mdns-test
+    volumes:
+      - .:/workspace
+    stdin_open: true
+    tty: true
