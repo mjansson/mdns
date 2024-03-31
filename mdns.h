@@ -1109,6 +1109,9 @@ mdns_multiquery_send(int sock, const mdns_query_t* query, size_t count, void* bu
 		data = mdns_string_make(buffer, capacity, data, query[iq].name, query[iq].length, 0);
 		if (!data)
 			return -1;
+		size_t remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+		if (remain < 4)
+			return -1;
 		// Record type
 		data = mdns_htons(data, query[iq].type);
 		//! Optional unicast response based on local port, class IN
