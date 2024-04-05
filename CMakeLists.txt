@@ -11,6 +11,8 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 # library
 # ##############################################################################
 
+include(GNUInstallDirs)
+
 add_library(${PROJECT_NAME} INTERFACE)
 target_include_directories(
   ${PROJECT_NAME} INTERFACE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/>
@@ -33,8 +35,6 @@ endif()
 # ##############################################################################
 # install
 # ##############################################################################
-
-include(GNUInstallDirs)
 
 install(
   TARGETS ${PROJECT_NAME}
