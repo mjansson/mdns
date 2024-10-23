@@ -754,7 +754,7 @@ send_dns_sd(void) {
 
 	for (int isock = 0; isock < num_sockets; ++isock)
 		mdns_socket_close(sockets[isock]);
-	printf("Closed socket%s\n", num_sockets ? "s" : "");
+	printf("Closed socket%s\n", num_sockets > 1 ? "s" : "");
 
 	return 0;
 }
@@ -769,7 +769,7 @@ send_mdns_query(mdns_query_t* query, size_t count) {
 		printf("Failed to open any client sockets\n");
 		return -1;
 	}
-	printf("Opened %d socket%s for mDNS query\n", num_sockets, num_sockets ? "s" : "");
+	printf("Opened %d socket%s for mDNS query\n", num_sockets, num_sockets > 1 ? "s" : "");
 
 	size_t capacity = 2048;
 	void* buffer = malloc(capacity);
@@ -834,7 +834,7 @@ send_mdns_query(mdns_query_t* query, size_t count) {
 
 	for (int isock = 0; isock < num_sockets; ++isock)
 		mdns_socket_close(sockets[isock]);
-	printf("Closed socket%s\n", num_sockets ? "s" : "");
+	printf("Closed socket%s\n", num_sockets > 1 ? "s" : "");
 
 	return 0;
 }
@@ -848,7 +848,7 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 		printf("Failed to open any client sockets\n");
 		return -1;
 	}
-	printf("Opened %d socket%s for mDNS service\n", num_sockets, num_sockets ? "s" : "");
+	printf("Opened %d socket%s for mDNS service\n", num_sockets, num_sockets > 1 ? "s" : "");
 
 	size_t service_name_length = strlen(service_name);
 	if (!service_name_length) {
@@ -1005,7 +1005,7 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 
 		for (int isock = 0; isock < num_sockets; ++isock)
 			mdns_goodbye_multicast(sockets[isock], buffer, capacity, service.record_ptr, 0, 0,
-			                        additional, additional_count);
+			                       additional, additional_count);
 	}
 
 	free(buffer);
@@ -1013,11 +1013,10 @@ service_mdns(const char* hostname, const char* service_name, int service_port) {
 
 	for (int isock = 0; isock < num_sockets; ++isock)
 		mdns_socket_close(sockets[isock]);
-	printf("Closed socket%s\n", num_sockets ? "s" : "");
+	printf("Closed socket%s\n", num_sockets > 1 ? "s" : "");
 
 	return 0;
 }
-
 
 // Dump all incoming mDNS queries and answers
 static int
@@ -1028,7 +1027,7 @@ dump_mdns(void) {
 		printf("Failed to open any client sockets\n");
 		return -1;
 	}
-	printf("Opened %d socket%s for mDNS dump\n", num_sockets, num_sockets ? "s" : "");
+	printf("Opened %d socket%s for mDNS dump\n", num_sockets, num_sockets > 1 ? "s" : "");
 
 	size_t capacity = 2048;
 	void* buffer = malloc(capacity);
@@ -1064,7 +1063,7 @@ dump_mdns(void) {
 
 	for (int isock = 0; isock < num_sockets; ++isock)
 		mdns_socket_close(sockets[isock]);
-	printf("Closed socket%s\n", num_sockets ? "s" : "");
+	printf("Closed socket%s\n", num_sockets > 1 ? "s" : "");
 
 	return 0;
 }
