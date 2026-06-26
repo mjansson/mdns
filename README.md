@@ -28,7 +28,7 @@ Call `mdns_socket_close` to close a socket opened with `mdns_socket_open_ipv4` o
 
 To open/setup the socket for one-shot queries you can pass a null pointer socket address, or set the port in the passed socket address to 0. This will bind the socket to a random ephemeral local UDP port as required by the RFCs for one-shot queries. You should NOT bind to port 5353 when doing one-shot queries (see the RFC for details).,
 
-To open/setup the socket for service, responding to incoming queries, you need pass in a socket address structure with the port set to 5353 (defined by MDNS_PORT in the header). You cannot pick any other port or you will not recieve any incoming queries.
+To open/setup the socket for service, responding to incoming queries, you need pass in a socket address structure with the port set to 5353 (defined by MDNS_PORT in the header). You cannot pick any other port or you will not receive any incoming queries.
 
 #### Network interface
 
@@ -48,7 +48,7 @@ To send a one-shot mDNS query for a single record use `mdns_query_send`. This wi
 
 To read query responses use `mdns_query_recv`. All records received since last call will be piped to the callback supplied in the function call. If `query_id` parameter is non-zero the function will filter out any response with a query ID that does not match the given query ID. The entry type will be one of `MDNS_ENTRYTYPE_ANSWER`, `MDNS_ENTRYTYPE_AUTHORITY` and `MDNS_ENTRYTYPE_ADDITIONAL`.
 
-Note that a socket opened for one-shot queries from an emphemeral port will not recieve any unsolicited answers (announces) as these are sent as a multicast on port 5353.
+Note that a socket opened for one-shot queries from an ephemeral port will not receive any unsolicited answers (announces) as these are sent as a multicast on port 5353.
 
 To send multiple queries in the same packet use `mdns_multiquery_send` which takes an array and count of service names and record types to query for.
 
