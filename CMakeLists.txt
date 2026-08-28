@@ -32,6 +32,13 @@ if(MDNS_BUILD_EXAMPLE)
   target_link_libraries(${PROJECT_NAME}_example ${PROJECT_NAME})
 endif()
 
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(${PROJECT_NAME}_record_parse_bounds_test tests/record_parse_bounds.c)
+  target_link_libraries(${PROJECT_NAME}_record_parse_bounds_test ${PROJECT_NAME})
+  add_test(NAME ${PROJECT_NAME}_record_parse_bounds COMMAND ${PROJECT_NAME}_record_parse_bounds_test)
+endif()
+
 # ##############################################################################
 # install
 # ##############################################################################

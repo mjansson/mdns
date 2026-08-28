@@ -1504,7 +1504,7 @@ static inline mdns_string_t
 mdns_record_parse_ptr(const void* buffer, size_t size, size_t offset, size_t length,
                       char* strbuffer, size_t capacity) {
 	// PTR record is just a string
-	if ((size >= offset + length) && (length >= 2))
+	if ((offset <= size && length <= size - offset) && (length >= 2))
 		return mdns_string_extract(buffer, size, &offset, strbuffer, capacity);
 	mdns_string_t empty = {0, 0};
 	return empty;
@@ -1521,7 +1521,7 @@ mdns_record_parse_srv(const void* buffer, size_t size, size_t offset, size_t len
 	// 2 bytes network-order unsigned weight
 	// 2 bytes network-order unsigned port
 	// string: discovery (domain) name, minimum 2 bytes when compressed
-	if ((size >= offset + length) && (length >= 8)) {
+	if ((offset <= size && length <= size - offset) && (length >= 8)) {
 		const uint16_t* recorddata = (const uint16_t*)MDNS_POINTER_OFFSET_CONST(buffer, offset);
 		srv.priority = mdns_ntohs(recorddata++);
 		srv.weight = mdns_ntohs(recorddata++);
@@ -1540,7 +1540,7 @@ mdns_record_parse_a(const void* buffer, size_t size, size_t offset, size_t lengt
 #ifdef __APPLE__
 	addr->sin_len = sizeof(struct sockaddr_in);
 #endif
-	if ((size >= offset + length) && (length == 4))
+	if ((offset <= size && length <= size - offset) && (length == 4))
 		memcpy(&addr->sin_addr.s_addr, MDNS_POINTER_OFFSET(buffer, offset), 4);
 	return addr;
 }
@@ -1553,7 +1553,7 @@ mdns_record_parse_aaaa(const void* buffer, size_t size, size_t offset, size_t le
 #ifdef __APPLE__
 	addr->sin6_len = sizeof(struct sockaddr_in6);
 #endif
-	if ((size >= offset + length) && (length == 16))
+	if ((offset <= size && length <= size - offset) && (length == 16))
 		memcpy(&addr->sin6_addr, MDNS_POINTER_OFFSET(buffer, offset), 16);
 	return addr;
 }
@@ -1563,10 +1563,9 @@ mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t len
                       mdns_record_txt_t* records, size_t capacity) {
 	size_t parsed = 0;
 	const char* strdata;
-	size_t end = offset + length;
-
-	if (size < end)
-		end = size;
+	size_t end = size;
+	if (offset <= size && length <= size - offset)
+		end = offset + length;
 
 	while ((offset < end) && (parsed < capacity)) {
 		strdata = (const char*)MDNS_POINTER_OFFSET(buffer, offset);
