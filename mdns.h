@@ -1056,6 +1056,7 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 	records = mdns_records_parse(sock, saddr, addrlen, buffer, data_size, &offset,
 	                             MDNS_ENTRYTYPE_ADDITIONAL, query_id, additional_rrs, callback,
 	                             user_data);
+	total_records += records;
 
 	return total_records;
 }

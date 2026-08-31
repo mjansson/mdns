@@ -21,6 +21,25 @@ struct parsed_record {
 	int address_parsed;
 };
 
+static void
+put_u16(uint8_t* destination, uint16_t value) {
+	destination[0] = (uint8_t)(value >> 8);
+	destination[1] = (uint8_t)value;
+}
+
+static int
+make_receiver(struct sockaddr_in* address) {
+	int sock = socket(AF_INET, SOCK_DGRAM, 0);
+	socklen_t length = sizeof(*address);
+	assert_true(sock >= 0);
+	memset(address, 0, sizeof(*address));
+	address->sin_family = AF_INET;
+	address->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	assert_int_equal(bind(sock, (const struct sockaddr*)address, sizeof(*address)), 0);
+	assert_int_equal(getsockname(sock, (struct sockaddr*)address, &length), 0);
+	return sock;
+}
+
 static int
 capture_record(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry_type_t entry,
                uint16_t query_id, uint16_t rtype, uint16_t rclass, uint32_t ttl, const void* data,
@@ -90,10 +109,50 @@ test_parses_simple_a_response(void** state) {
 	assert_memory_equal(&record.address.sin_addr, expected_address, sizeof(expected_address));
 }
 
+static void
+test_listen_counts_additional_records(void** state) {
+	uint8_t packet[32] = {0};
+	uint8_t receive_buffer[32];
+	struct parsed_record record = {0};
+	struct sockaddr_in receiver_address;
+	int receiver = make_receiver(&receiver_address);
+	int sender = socket(AF_INET, SOCK_DGRAM, 0);
+	size_t position = sizeof(struct mdns_header_t);
+
+	(void)state;
+	assert_true(sender >= 0);
+	put_u16(packet + 2, 0x8400);
+	put_u16(packet + 10, 1);
+	packet[position++] = 0;
+	put_u16(packet + position, MDNS_RECORDTYPE_A);
+	position += 2;
+	put_u16(packet + position, MDNS_CLASS_IN);
+	position += 2;
+	position += 4;
+	put_u16(packet + position, 4);
+	position += 2;
+	packet[position++] = 192;
+	packet[position++] = 0;
+	packet[position++] = 2;
+	packet[position++] = 1;
+
+	assert_int_equal(sendto(sender, packet, position, 0,
+	                        (const struct sockaddr*)&receiver_address, sizeof(receiver_address)),
+	                 position);
+	assert_int_equal(mdns_socket_listen(receiver, receive_buffer, sizeof(receive_buffer),
+	                                    capture_record, &record),
+	                 1);
+	assert_int_equal(record.callback_count, 1);
+	assert_int_equal(record.entry, MDNS_ENTRYTYPE_ADDITIONAL);
+	close(sender);
+	close(receiver);
+}
+
 int
 main(void) {
 	const struct CMUnitTest tests[] = {
 	    cmocka_unit_test(test_parses_simple_a_response),
+	    cmocka_unit_test(test_listen_counts_additional_records),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
