@@ -779,7 +779,8 @@ mdns_records_parse(int sock, const struct sockaddr* from, size_t addrlen, const 
 	size_t parsed = 0;
 	for (size_t i = 0; i < records; ++i) {
 		size_t name_offset = *offset;
-		mdns_string_skip(buffer, size, offset);
+		if (!mdns_string_skip(buffer, size, offset))
+			return parsed;
 		if (((*offset) + 10) > size)
 			return parsed;
 		size_t name_length = (*offset) - name_offset;

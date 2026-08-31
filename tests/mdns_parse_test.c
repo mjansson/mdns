@@ -90,10 +90,28 @@ test_parses_simple_a_response(void** state) {
 	assert_memory_equal(&record.address.sin_addr, expected_address, sizeof(expected_address));
 }
 
+static void
+test_records_reject_invalid_owner_name(void** state) {
+	static const uint8_t record_data[] = {
+	    0xc0, 0xff, /* Compression pointer outside the packet. */
+	    0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	};
+	struct parsed_record record = {0};
+	size_t offset = 0;
+
+	(void)state;
+	assert_int_equal(mdns_records_parse(-1, NULL, 0, record_data, sizeof(record_data), &offset,
+	                                    MDNS_ENTRYTYPE_ANSWER, 0, 1, capture_record, &record),
+	                 0);
+	assert_int_equal(record.callback_count, 0);
+	assert_int_equal(offset, 0);
+}
+
 int
 main(void) {
 	const struct CMUnitTest tests[] = {
 	    cmocka_unit_test(test_parses_simple_a_response),
+	    cmocka_unit_test(test_records_reject_invalid_owner_name),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
