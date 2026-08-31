@@ -917,6 +917,8 @@ mdns_discovery_recv(int sock, void* buffer, size_t capacity, mdns_record_callbac
 		if (!mdns_string_equal(buffer, data_size, &offset, mdns_services_query,
 		                       sizeof(mdns_services_query), &verify_offset))
 			return 0;
+		if ((data_size - offset) < 4)
+			return 0;
 		data = (const uint16_t*)MDNS_POINTER_OFFSET(buffer, offset);
 
 		uint16_t rtype = mdns_ntohs(data++);
@@ -1016,6 +1018,8 @@ mdns_socket_listen(int sock, void* buffer, size_t capacity, mdns_record_callback
 		} else if (!mdns_string_skip(buffer, data_size, &offset)) {
 			break;
 		}
+		if ((data_size - offset) < 4)
+			return total_records;
 		size_t length = offset - question_offset;
 		data = (const uint16_t*)MDNS_POINTER_OFFSET_CONST(buffer, offset);
 
@@ -1157,6 +1161,8 @@ mdns_query_recv(int sock, void* buffer, size_t capacity, mdns_record_callback_fn
 	for (i = 0; i < questions; ++i) {
 		size_t offset = MDNS_POINTER_DIFF(data, buffer);
 		if (!mdns_string_skip(buffer, data_size, &offset))
+			return 0;
+		if ((data_size - offset) < 4)
 			return 0;
 		data = (const uint16_t*)MDNS_POINTER_OFFSET_CONST(buffer, offset);
 		// Record type and class not used, skip
