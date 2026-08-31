@@ -90,10 +90,24 @@ test_parses_simple_a_response(void** state) {
 	assert_memory_equal(&record.address.sin_addr, expected_address, sizeof(expected_address));
 }
 
+static void
+test_query_send_rejects_empty_name_without_touching_buffer(void** state) {
+	uint8_t buffer[128];
+	uint8_t expected[sizeof(buffer)];
+
+	(void)state;
+	memset(buffer, 0xa5, sizeof(buffer));
+	memcpy(expected, buffer, sizeof(buffer));
+	assert_int_equal(mdns_query_send(-1, MDNS_RECORDTYPE_PTR, "", 0, buffer, sizeof(buffer), 1),
+	                 -1);
+	assert_memory_equal(buffer, expected, sizeof(buffer));
+}
+
 int
 main(void) {
 	const struct CMUnitTest tests[] = {
 	    cmocka_unit_test(test_parses_simple_a_response),
+	    cmocka_unit_test(test_query_send_rejects_empty_name_without_touching_buffer),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

@@ -739,6 +739,8 @@ mdns_string_make(void* buffer, size_t capacity, void* data, const char* name, si
                  mdns_string_table_t* string_table) {
 	size_t last_pos = 0;
 	size_t remain = capacity - MDNS_POINTER_DIFF(data, buffer);
+	if (!name || !length)
+		return 0;
 	if (name[length - 1] == '.')
 		--length;
 	while (last_pos < length) {
@@ -1073,8 +1075,12 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 static inline int
 mdns_multiquery_send(int sock, const mdns_query_t* query, size_t count, void* buffer, size_t capacity,
                      uint16_t query_id) {
-	if (!count || (capacity < (sizeof(struct mdns_header_t) + (6 * count))))
+	if (!query || !count || (capacity < (sizeof(struct mdns_header_t) + (6 * count))))
 		return -1;
+	for (size_t iq = 0; iq < count; ++iq) {
+		if (!query[iq].name || !query[iq].length)
+			return -1;
+	}
 
 	// Ask for a unicast response since it's a one-shot query
 	uint16_t rclass = MDNS_CLASS_IN | MDNS_UNICAST_RESPONSE;
