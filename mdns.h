@@ -1500,14 +1500,30 @@ mdns_goodbye_multicast(int sock, void* buffer, size_t capacity, mdns_record_t an
 	                                        MDNS_CLASS_IN, 0);
 }
 
+static inline int
+mdns_record_range_valid(size_t size, size_t offset, size_t length) {
+	return (offset <= size) && (length <= (size - offset));
+}
+
+static inline mdns_string_t
+mdns_record_parse_name(const void* buffer, size_t size, size_t offset, size_t length,
+                       char* strbuffer, size_t capacity) {
+	mdns_string_t empty = {0, 0};
+	if (!length || !mdns_record_range_valid(size, offset, length))
+		return empty;
+
+	size_t name_offset = offset;
+	mdns_string_t name = mdns_string_extract(buffer, size, &name_offset, strbuffer, capacity);
+	if ((name_offset == offset) || (name_offset > (offset + length)))
+		return empty;
+	return name;
+}
+
 static inline mdns_string_t
 mdns_record_parse_ptr(const void* buffer, size_t size, size_t offset, size_t length,
                       char* strbuffer, size_t capacity) {
 	// PTR record is just a string
-	if ((size >= offset + length) && (length >= 2))
-		return mdns_string_extract(buffer, size, &offset, strbuffer, capacity);
-	mdns_string_t empty = {0, 0};
-	return empty;
+	return mdns_record_parse_name(buffer, size, offset, length, strbuffer, capacity);
 }
 
 static inline mdns_record_srv_t
@@ -1520,14 +1536,16 @@ mdns_record_parse_srv(const void* buffer, size_t size, size_t offset, size_t len
 	// 2 bytes network-order unsigned priority
 	// 2 bytes network-order unsigned weight
 	// 2 bytes network-order unsigned port
-	// string: discovery (domain) name, minimum 2 bytes when compressed
-	if ((size >= offset + length) && (length >= 8)) {
+	// string: discovery (domain) name, minimum 1 byte for the root name
+	if ((length >= 7) && mdns_record_range_valid(size, offset, length)) {
 		const uint16_t* recorddata = (const uint16_t*)MDNS_POINTER_OFFSET_CONST(buffer, offset);
 		srv.priority = mdns_ntohs(recorddata++);
 		srv.weight = mdns_ntohs(recorddata++);
 		srv.port = mdns_ntohs(recorddata++);
 		offset += 6;
-		srv.name = mdns_string_extract(buffer, size, &offset, strbuffer, capacity);
+		srv.name = mdns_record_parse_name(buffer, size, offset, length - 6, strbuffer, capacity);
+		if (!srv.name.str)
+			memset(&srv, 0, sizeof(mdns_record_srv_t));
 	}
 	return srv;
 }
@@ -1540,7 +1558,7 @@ mdns_record_parse_a(const void* buffer, size_t size, size_t offset, size_t lengt
 #ifdef __APPLE__
 	addr->sin_len = sizeof(struct sockaddr_in);
 #endif
-	if ((size >= offset + length) && (length == 4))
+	if ((length == 4) && mdns_record_range_valid(size, offset, length))
 		memcpy(&addr->sin_addr.s_addr, MDNS_POINTER_OFFSET(buffer, offset), 4);
 	return addr;
 }
@@ -1553,7 +1571,7 @@ mdns_record_parse_aaaa(const void* buffer, size_t size, size_t offset, size_t le
 #ifdef __APPLE__
 	addr->sin6_len = sizeof(struct sockaddr_in6);
 #endif
-	if ((size >= offset + length) && (length == 16))
+	if ((length == 16) && mdns_record_range_valid(size, offset, length))
 		memcpy(&addr->sin6_addr, MDNS_POINTER_OFFSET(buffer, offset), 16);
 	return addr;
 }

@@ -189,6 +189,7 @@ pip-log.txt
 ###############
 
 #Project builds
+/_build/
 lib/**
 bin/**
 dist/**
