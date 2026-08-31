@@ -90,10 +90,84 @@ test_parses_simple_a_response(void** state) {
 	assert_memory_equal(&record.address.sin_addr, expected_address, sizeof(expected_address));
 }
 
+static void
+test_record_parsers_reject_wrapped_ranges(void** state) {
+	uint8_t a_data[4] = {1, 2, 3, 4};
+	uint8_t aaaa_data[16] = {1, 2, 3, 4};
+	uint8_t srv_data[8] = {0, 1, 0, 2, 0, 3, 0};
+	struct sockaddr_in address;
+	struct sockaddr_in6 address6;
+	char name_buffer[32];
+	mdns_record_srv_t srv;
+
+	(void)state;
+	mdns_record_parse_a(a_data, 1, SIZE_MAX - 3, 4, &address);
+	mdns_record_parse_aaaa(aaaa_data, 1, SIZE_MAX - 15, 16, &address6);
+	srv = mdns_record_parse_srv(srv_data, 1, SIZE_MAX - 7, 8, name_buffer,
+	                            sizeof(name_buffer));
+	assert_int_equal(address.sin_addr.s_addr, 0);
+	assert_memory_equal(&address6.sin6_addr, (uint8_t[16]){0}, 16);
+	assert_int_equal(srv.priority, 0);
+	assert_int_equal(srv.weight, 0);
+	assert_int_equal(srv.port, 0);
+}
+
+static void
+test_record_names_stay_within_rdata(void** state) {
+	static const uint8_t ptr_data[] = {3, 'b', 'a', 'd', 0};
+	static const uint8_t srv_data[] = {0, 1, 0, 2, 0, 3, 3, 'b', 'a', 'd', 0};
+	char ptr_buffer[32] = {0};
+	char srv_buffer[32] = {0};
+	mdns_string_t ptr;
+	mdns_record_srv_t srv;
+
+	(void)state;
+	ptr = mdns_record_parse_ptr(ptr_data, sizeof(ptr_data), 0, 2, ptr_buffer,
+	                            sizeof(ptr_buffer));
+	srv = mdns_record_parse_srv(srv_data, sizeof(srv_data), 0, 8, srv_buffer,
+	                            sizeof(srv_buffer));
+	assert_int_equal(ptr.length, 0);
+	assert_int_equal(srv.priority, 0);
+	assert_int_equal(srv.weight, 0);
+	assert_int_equal(srv.port, 0);
+	assert_int_equal(srv.name.length, 0);
+}
+
+static void
+test_srv_accepts_root_target(void** state) {
+	static const uint8_t data[] = {0, 1, 0, 2, 0x13, 0x37, 0};
+	char name_buffer[32];
+	mdns_record_srv_t srv;
+
+	(void)state;
+	srv = mdns_record_parse_srv(data, sizeof(data), 0, sizeof(data), name_buffer,
+	                            sizeof(name_buffer));
+	assert_int_equal(srv.priority, 1);
+	assert_int_equal(srv.weight, 2);
+	assert_int_equal(srv.port, 0x1337);
+	assert_int_equal(srv.name.length, 0);
+}
+
+static void
+test_ptr_allows_compression_target_outside_rdata(void** state) {
+	static const uint8_t data[] = {3, 'f', 'o', 'o', 0, 0xc0, 0};
+	char name_buffer[32] = {0};
+	mdns_string_t name;
+
+	(void)state;
+	name = mdns_record_parse_ptr(data, sizeof(data), 5, 2, name_buffer, sizeof(name_buffer));
+	assert_int_equal(name.length, 4);
+	assert_memory_equal(name.str, "foo.", 4);
+}
+
 int
 main(void) {
 	const struct CMUnitTest tests[] = {
 	    cmocka_unit_test(test_parses_simple_a_response),
+	    cmocka_unit_test(test_record_parsers_reject_wrapped_ranges),
+	    cmocka_unit_test(test_record_names_stay_within_rdata),
+	    cmocka_unit_test(test_srv_accepts_root_target),
+	    cmocka_unit_test(test_ptr_allows_compression_target_outside_rdata),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
