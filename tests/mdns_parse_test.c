@@ -22,6 +22,19 @@ struct parsed_record {
 };
 
 static int
+make_receiver(struct sockaddr_in* address) {
+	int sock = socket(AF_INET, SOCK_DGRAM, 0);
+	socklen_t length = sizeof(*address);
+	assert_true(sock >= 0);
+	memset(address, 0, sizeof(*address));
+	address->sin_family = AF_INET;
+	address->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	assert_int_equal(bind(sock, (const struct sockaddr*)address, sizeof(*address)), 0);
+	assert_int_equal(getsockname(sock, (struct sockaddr*)address, &length), 0);
+	return sock;
+}
+
+static int
 capture_record(int sock, const struct sockaddr* from, size_t addrlen, mdns_entry_type_t entry,
                uint16_t query_id, uint16_t rtype, uint16_t rclass, uint32_t ttl, const void* data,
                size_t size, size_t name_offset, size_t name_length, size_t record_offset,
@@ -90,10 +103,37 @@ test_parses_simple_a_response(void** state) {
 	assert_memory_equal(&record.address.sin_addr, expected_address, sizeof(expected_address));
 }
 
+static void
+test_listen_rejects_question_without_type_and_class(void** state) {
+	uint8_t packet[sizeof(struct mdns_header_t) + 1] = {0};
+	uint8_t receive_buffer[sizeof(packet) + 4] = {0};
+	struct parsed_record record = {0};
+	struct sockaddr_in receiver_address;
+	int receiver = make_receiver(&receiver_address);
+	int sender = socket(AF_INET, SOCK_DGRAM, 0);
+
+	(void)state;
+	assert_true(sender >= 0);
+	packet[5] = 1;
+	/* Bytes after the received datagram look like a valid QTYPE and QCLASS. */
+	receive_buffer[sizeof(packet) + 1] = MDNS_RECORDTYPE_A;
+	receive_buffer[sizeof(packet) + 3] = MDNS_CLASS_IN;
+	assert_int_equal(sendto(sender, packet, sizeof(packet), 0,
+	                        (const struct sockaddr*)&receiver_address, sizeof(receiver_address)),
+	                 sizeof(packet));
+	assert_int_equal(mdns_socket_listen(receiver, receive_buffer, sizeof(receive_buffer),
+	                                    capture_record, &record),
+	                 0);
+	assert_int_equal(record.callback_count, 0);
+	close(sender);
+	close(receiver);
+}
+
 int
 main(void) {
 	const struct CMUnitTest tests[] = {
 	    cmocka_unit_test(test_parses_simple_a_response),
+	    cmocka_unit_test(test_listen_rejects_question_without_type_and_class),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
