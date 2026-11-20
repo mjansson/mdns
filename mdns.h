@@ -694,9 +694,14 @@ mdns_string_table_find(mdns_string_table_t* string_table, const void* buffer, si
 			offset = dot_pos + 1;
 		}
 
-		// Return reference offset if entire string matches
-		if (offset >= total_length)
-			return string_table->offset[istr];
+		// Return reference offset if entire string matches and the stored name also ends here,
+		// otherwise a reference to "b.c" would be returned for "b"
+		if (offset >= total_length) {
+			sub_string =
+			    mdns_get_next_substring(buffer, capacity, sub_string.offset + sub_string.length);
+			if ((sub_string.offset != MDNS_INVALID_POS) && !sub_string.length)
+				return string_table->offset[istr];
+		}
 	}
 
 	return MDNS_INVALID_POS;
@@ -734,10 +739,26 @@ mdns_string_make_ref(void* data, size_t capacity, size_t ref_offset) {
 	return mdns_htons(data, 0xC000 | (uint16_t)ref_offset);
 }
 
+// Add the label offsets of a completed name to the string table. The offsets are stored as a ring
+// in pending, of which only the last pending_capacity are kept, oldest first
+static inline void
+mdns_string_table_add_pending(mdns_string_table_t* string_table, const size_t* pending,
+                              size_t pending_capacity, size_t pending_count) {
+	size_t first = (pending_count > pending_capacity) ? (pending_count - pending_capacity) : 0;
+	for (size_t ip = first; ip < pending_count; ++ip)
+		mdns_string_table_add(string_table, pending[ip % pending_capacity]);
+}
+
 static inline void*
 mdns_string_make(void* buffer, size_t capacity, void* data, const char* name, size_t length,
                  mdns_string_table_t* string_table) {
 	size_t last_pos = 0;
+	// Labels of this name are added to the string table only once the name is complete, so a
+	// later label of the same name can never reference an earlier, still unterminated one. The
+	// table holds 16 entries, so only the offsets of the last 16 labels need to be kept
+	size_t pending[16];
+	size_t pending_capacity = sizeof(pending) / sizeof(pending[0]);
+	size_t pending_count = 0;
 	size_t remain = capacity - MDNS_POINTER_DIFF(data, buffer);
 	if (name[length - 1] == '.')
 		--length;
@@ -750,15 +771,20 @@ mdns_string_make(void* buffer, size_t capacity, void* data, const char* name, si
 		    mdns_string_table_find(string_table, buffer, capacity,
 		                           (char*)MDNS_POINTER_OFFSET(name, last_pos), sub_length,
 		                           total_length);
-		if (ref_offset != MDNS_INVALID_POS)
-			return mdns_string_make_ref(data, remain, ref_offset);
+		if (ref_offset != MDNS_INVALID_POS) {
+			data = mdns_string_make_ref(data, remain, ref_offset);
+			if (data)
+				mdns_string_table_add_pending(string_table, pending, pending_capacity,
+				                              pending_count);
+			return data;
+		}
 
 		if (remain <= (sub_length + 1))
 			return 0;
 
 		*(unsigned char*)data = (unsigned char)sub_length;
 		memcpy(MDNS_POINTER_OFFSET(data, 1), name + last_pos, sub_length);
-		mdns_string_table_add(string_table, MDNS_POINTER_DIFF(data, buffer));
+		pending[pending_count++ % pending_capacity] = MDNS_POINTER_DIFF(data, buffer);
 
 		data = MDNS_POINTER_OFFSET(data, sub_length + 1);
 		last_pos = ((pos != MDNS_INVALID_POS) ? pos + 1 : length);
@@ -769,6 +795,7 @@ mdns_string_make(void* buffer, size_t capacity, void* data, const char* name, si
 		return 0;
 
 	*(unsigned char*)data = 0;
+	mdns_string_table_add_pending(string_table, pending, pending_capacity, pending_count);
 	return MDNS_POINTER_OFFSET(data, 1);
 }
 

@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.5)
 project(mdns VERSION 1.4.2 LANGUAGES C)
 
 option(MDNS_BUILD_EXAMPLE "build example" ON)
+set(MDNS_IS_TOP_LEVEL OFF)
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+  set(MDNS_IS_TOP_LEVEL ON)
+endif()
+option(MDNS_BUILD_TESTS "build tests" ${MDNS_IS_TOP_LEVEL})
 
 # Set the output of the libraries and executables.
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
@@ -30,6 +35,19 @@ target_compile_features(${PROJECT_NAME} INTERFACE c_std_99)
 if(MDNS_BUILD_EXAMPLE)
   add_executable(${PROJECT_NAME}_example mdns.c)
   target_link_libraries(${PROJECT_NAME}_example ${PROJECT_NAME})
+endif()
+
+# ##############################################################################
+# tests
+# ##############################################################################
+
+if(MDNS_BUILD_TESTS)
+  enable_testing()
+  add_executable(${PROJECT_NAME}_test_string_compression
+                 test/test_string_compression.c)
+  target_link_libraries(${PROJECT_NAME}_test_string_compression ${PROJECT_NAME})
+  add_test(NAME string_compression
+           COMMAND ${PROJECT_NAME}_test_string_compression)
 endif()
 
 # ##############################################################################
