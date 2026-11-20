@@ -42,7 +42,7 @@ decode_name(size_t pos, char* out, size_t capacity) {
 		out[used] = 0;
 		pos += 1 + length;
 	}
-	return -1;
+	return -2;
 }
 
 static void
@@ -108,9 +108,15 @@ main(void) {
 
 	// Names with more labels than the string table holds still share their last labels
 	reset();
-	check_name("l1.l2.l3.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15.l16.l17.l18.local.", 0);
+	check_name("l1.l2.l3.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15.l16.l17.l18.local.", 70);
 	check_name("x.local.", 4);
 	check_name("x.l18.local.", 4);
+
+	// The table keeps exactly the last 16 labels, oldest evicted first
+	reset();
+	check_name("l1.l2.l3.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15.l16.l17.l18.local.", 70);
+	check_name("x.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15.l16.l17.l18.local.", 4);  // l4 kept
+	check_name("y.local.", 4);  // adding "x" evicted l4, not "local"
 
 	if (failures)
 		printf("%d failure(s)\n", failures);
